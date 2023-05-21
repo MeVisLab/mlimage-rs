@@ -4,7 +4,7 @@ use nom::{
     bytes::complete::{is_not, tag},
     character::complete as cc,
     combinator::map,
-    sequence::{pair, terminated},
+    sequence::{pair, preceded, terminated},
     IResult,
 };
 
@@ -23,7 +23,14 @@ pub fn version_header(input: &[u8]) -> IResult<&[u8], VersionHeader> {
     let (input, major) = terminated(cc::u16, cc::char('.'))(input)?;
     let (input, minor) = terminated(cc::u16, cc::char('.'))(input)?;
     let (input, patch) = terminated(cc::u16, cc::char('\0'))(input)?;
-    Ok((input, VersionHeader{ major, minor, patch }))
+    Ok((
+        input,
+        VersionHeader {
+            major,
+            minor,
+            patch,
+        },
+    ))
 }
 
 pub fn tag_string(input: &[u8]) -> IResult<&[u8], String> {
@@ -37,9 +44,22 @@ pub fn tag_pair(input: &[u8]) -> IResult<&[u8], (String, String)> {
     pair(tag_string, tag_string)(input)
 }
 
+pub fn tag_list_size_in_bytes(input: &[u8]) -> IResult<&[u8], usize> {
+    preceded(
+        tag("ML_TAG_LIST_SIZE_IN_BYTES\0"),
+        terminated(
+            map(cc::u64, |size| size as _),
+            pair(cc::space0, cc::char('\0')),
+        ),
+    )(input)
+}
+
 pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
-    let (rest, version) = version_header(input)?;
-    Ok((rest, MLImage{ version }))
+    let (tag_list_input, version) = version_header(input)?;
+
+    let (input, tag_list_size) = tag_list_size_in_bytes(tag_list_input)?;
+
+    Ok((input, MLImage { version }))
 }
 
 #[cfg(test)]
@@ -80,14 +100,23 @@ mod tests {
     }
 
     #[test]
+    fn test_tag_list_size_in_bytes() {
+        let result = tag_list_size_in_bytes(b"ML_TAG_LIST_SIZE_IN_BYTES\01115           \0");
+        assert!(result.is_ok());
+        if let Some((rest, size)) = result.ok() {
+            assert_eq!(size, 1115);
+            assert_eq!(rest.len(), 0);
+        }
+    }
+
+    #[test]
     fn test_file() {
         let asset = include_bytes!("../assets/test_32x32x8.mlimage");
         let result = parse_file(asset);
         assert!(result.is_ok());
-        if let Some((rest, image) )= result.ok() {
+        if let Some((rest, image)) = result.ok() {
             assert_eq!(image.version.major, 0);
             assert_eq!(image.version.minor, 1);
-
         }
     }
 }
