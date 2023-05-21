@@ -8,12 +8,18 @@ use nom::{
     IResult,
 };
 
-pub fn version_header(input: &[u8]) -> IResult<&[u8], (u16, u16, u16)> {
+pub struct VersionHeader {
+    pub major: u16,
+    pub minor: u16,
+    pub patch: u16,
+}
+
+pub fn version_header(input: &[u8]) -> IResult<&[u8], VersionHeader> {
     let (input, _header) = tag("MLImageFormatVersion.")(input)?;
     let (input, major) = terminated(cc::u16, cc::char('.'))(input)?;
     let (input, minor) = terminated(cc::u16, cc::char('.'))(input)?;
     let (input, patch) = terminated(cc::u16, cc::char('\0'))(input)?;
-    Ok((input, (major, minor, patch)))
+    Ok((input, VersionHeader{ major, minor, patch }))
 }
 
 pub fn tag_string(input: &[u8]) -> IResult<&[u8], String> {
@@ -36,7 +42,9 @@ mod tests {
         let result = version_header(b"MLImageFormatVersion.000.001.000\0");
         assert!(result.is_ok());
         if let Some((rest, result_version)) = result.ok() {
-            assert_eq!(result_version, (0, 1, 0));
+            assert_eq!(result_version.major, 0);
+            assert_eq!(result_version.minor, 1);
+            assert_eq!(result_version.patch, 0);
             assert_eq!(rest.len(), 0);
         }
     }
