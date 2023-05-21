@@ -14,6 +14,10 @@ pub struct VersionHeader {
     pub patch: u16,
 }
 
+pub struct MLImage {
+    pub version: VersionHeader,
+}
+
 pub fn version_header(input: &[u8]) -> IResult<&[u8], VersionHeader> {
     let (input, _header) = tag("MLImageFormatVersion.")(input)?;
     let (input, major) = terminated(cc::u16, cc::char('.'))(input)?;
@@ -31,6 +35,11 @@ pub fn tag_string(input: &[u8]) -> IResult<&[u8], String> {
 
 pub fn tag_pair(input: &[u8]) -> IResult<&[u8], (String, String)> {
     pair(tag_string, tag_string)(input)
+}
+
+pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
+    let (rest, version) = version_header(input)?;
+    Ok((rest, MLImage{ version }))
 }
 
 #[cfg(test)]
@@ -67,6 +76,18 @@ mod tests {
             assert_eq!(&tag_name, "ML_ENDIANESS");
             assert_eq!(&tag_value, "0");
             assert_eq!(rest.len(), 0);
+        }
+    }
+
+    #[test]
+    fn test_file() {
+        let asset = include_bytes!("../assets/test_32x32x8.mlimage");
+        let result = parse_file(asset);
+        assert!(result.is_ok());
+        if let Some((rest, image) )= result.ok() {
+            assert_eq!(image.version.major, 0);
+            assert_eq!(image.version.minor, 1);
+
         }
     }
 }

@@ -1,0 +1,118 @@
+// MDL v1 utf8
+mevislabVersion = 3.5legacy
+network  {
+  watchlist = ""
+}
+module TestPattern {
+  internal  {
+    frame = "473 309 112 72"
+    moduleGroupName = ""
+    showNetworkPanel = true
+    windows  {
+      window _default {
+        geometry = "686 293 301 436"
+        sizeHint = "301 436"
+        wasOpen = no
+      }
+    }
+  }
+  fields  {
+    instanceName = TestPattern
+    sizeX = 32
+    sizeY = 32
+    sizeZ = 8
+    sizeC = 1
+    sizeT = 1
+    sizeU = 1
+    dataType = "unsigned int16"
+    fillValue = 0
+    autoApply = FALSE
+    pattern = IndexRamp
+    voxelSize = "1 1 1"
+    gradient = "0 0 0"
+    eigenValues = "1 0 -1"
+    offDiagonalElements = "0 0 0"
+    fillValue2 = 65535
+    pageSizeX = 16
+    pageSizeY = 16
+    pageSizeZ = 2
+    pageSizeC = 1
+    pageSizeT = 1
+    pageSizeU = 1
+  }
+}
+module MLImageFormatSave {
+  internal  {
+    frame = "441 173 176 56"
+    moduleGroupName = ""
+    showNetworkPanel = true
+    windows  {
+      window _default {
+        geometry = "585 304 390 429"
+        sizeHint = "340 429"
+        wasOpen = no
+      }
+    }
+  }
+  fields  {
+    instanceName = MLImageFormatSave
+    compression = LZ4
+    dblHintVal0 = 0
+    intHintVal0 = 0
+    strHintVal0 = ""
+    boolHintVal0 = FALSE
+    dblHintVal1 = 0
+    intHintVal1 = 0
+    strHintVal1 = ""
+    boolHintVal1 = FALSE
+    dblHintVal2 = 0
+    intHintVal2 = 0
+    strHintVal2 = ""
+    boolHintVal2 = FALSE
+    dblHintVal3 = 0
+    intHintVal3 = 0
+    strHintVal3 = ""
+    boolHintVal3 = FALSE
+    dblHintVal4 = 0
+    intHintVal4 = 0
+    strHintVal4 = ""
+    boolHintVal4 = FALSE
+    dblHintVal5 = 0
+    intHintVal5 = 0
+    strHintVal5 = ""
+    boolHintVal5 = FALSE
+    dblHintVal6 = 0
+    intHintVal6 = 0
+    strHintVal6 = ""
+    boolHintVal6 = FALSE
+    dblHintVal7 = 0
+    intHintVal7 = 0
+    strHintVal7 = ""
+    boolHintVal7 = FALSE
+    dblHintVal8 = 0
+    intHintVal8 = 0
+    strHintVal8 = ""
+    boolHintVal8 = FALSE
+    dblHintVal9 = 0
+    intHintVal9 = 0
+    strHintVal9 = ""
+    boolHintVal9 = FALSE
+    userTag00 = ""
+    userTag01 = ""
+    userTag02 = ""
+    userTag03 = ""
+    userTag04 = ""
+    userTag05 = ""
+    userTag06 = ""
+    userTag07 = ""
+    userTag08 = ""
+    userTag09 = ""
+    regionOffset = "0 0 0 0 0 0"
+    suppressWorldPos = FALSE
+    fileName = $(NETWORK)/test_32x32x8.mlimage
+  }
+}
+connections  {
+  MLImageFormatSave.input0 = TestPattern.output0
+}
+networkModel = ""
