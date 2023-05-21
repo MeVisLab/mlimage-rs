@@ -4,6 +4,7 @@ use nom::{
     bytes::complete::{is_not, tag},
     character::complete as cc,
     combinator::map,
+    multi::many0,
     sequence::{pair, preceded, terminated},
     IResult,
 };
@@ -16,6 +17,7 @@ pub struct VersionHeader {
 
 pub struct MLImage {
     pub version: VersionHeader,
+    pub tag_list: Vec<(String, String)>,
 }
 
 pub fn version_header(input: &[u8]) -> IResult<&[u8], VersionHeader> {
@@ -54,12 +56,19 @@ pub fn tag_list_size_in_bytes(input: &[u8]) -> IResult<&[u8], usize> {
     )(input)
 }
 
+pub fn tag_list(input: &[u8]) -> IResult<&[u8], Vec<(String, String)>> {
+    many0(tag_pair)(input)
+}
+
 pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
     let (tag_list_input, version) = version_header(input)?;
 
     let (input, tag_list_size) = tag_list_size_in_bytes(tag_list_input)?;
 
-    Ok((input, MLImage { version }))
+    let (tag_list_input, rest) = tag_list_input.split_at(tag_list_size);
+    let (nothing, tag_list) = tag_list(tag_list_input)?;
+
+    Ok((input, MLImage { version, tag_list }))
 }
 
 #[cfg(test)]
