@@ -1,4 +1,7 @@
-use std::{fmt::Display, str::{from_utf8, FromStr}};
+use std::{
+    fmt::Display,
+    str::{from_utf8, FromStr},
+};
 
 use nom::{
     bytes::complete::{is_not, tag},
@@ -157,16 +160,31 @@ pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
 
     let (tag_list_input, rest) = tag_list_input.split_at(tag_list_size);
     let (nothing, tag_list) = tag_list(tag_list_input)?;
-
     dbg!(&tag_list);
+    let tag_list = TagList(tag_list);
 
-    Ok((
-        input,
-        MLImage {
-            version,
-            tag_list: TagList(tag_list),
-        },
-    ))
+    // FIXME: how to do error handling with nom?
+    let dtype_size: usize = tag_list.parse_tag_value("ML_IMAGE_DTYPE_SIZE").unwrap();
+    assert_eq!(dtype_size, 2);
+
+    let image_extent: Vec<usize> = "XYZCTU"
+        .chars()
+        .filter_map(|dim| {
+            tag_list
+                .parse_tag_value(&format!("ML_IMAGE_EXT_{}", dim))
+                .ok()
+        })
+        .collect();
+    let page_extent: Vec<usize> = "XYZCTU"
+        .chars()
+        .filter_map(|dim| {
+            tag_list
+                .parse_tag_value(&format!("ML_PAGE_EXT_{}", dim))
+                .ok()
+        })
+        .collect();
+
+    Ok((input, MLImage { version, tag_list }))
 }
 
 #[cfg(test)]
