@@ -1,4 +1,4 @@
-use std::str::from_utf8;
+use std::{fmt::Display, str::from_utf8};
 
 use nom::{
     bytes::complete::{is_not, tag},
@@ -29,6 +29,52 @@ pub struct PageIdxEntry {
 pub struct MLImage {
     pub version: VersionHeader,
     pub tag_list: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TagError {
+    pub tag_name: String,
+    pub tag_value: Option<String>,
+}
+
+impl Display for TagError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(value) = &self.tag_value {
+            write!(
+                f,
+                "could not parse tag '{}' with value '{}'",
+                self.tag_name, value
+            )
+        } else {
+            write!(f, "tag '{}' not found", self.tag_name)
+        }
+    }
+}
+
+impl MLImage {
+    pub fn tag_value(&self, tag_name: &str) -> Option<String> {
+        self.tag_list.iter().find_map(|(key, value)| {
+            if key == tag_name {
+                Some(value.clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn tag_value_usize(&self, tag_name: &str) -> Result<usize, TagError> {
+        if let Some(value) = self.tag_value(tag_name) {
+            value.parse().or(Err(TagError {
+                tag_name: tag_name.to_owned(),
+                tag_value: Some(value),
+            }))
+        } else {
+            Err(TagError {
+                tag_name: tag_name.to_owned(),
+                tag_value: None,
+            })
+        }
+    }
 }
 
 pub fn version_header(input: &[u8]) -> IResult<&[u8], VersionHeader> {
@@ -160,6 +206,38 @@ mod tests {
             assert_eq!(size, 1115);
             assert_eq!(rest.len(), 0);
         }
+    }
+
+    #[test]
+    fn test_reading_missing_tag() {
+        let tag_list = vec![("SOME_TAG".to_string(), "existing_value".to_string())];
+        let mlimage = MLImage {
+            version: VersionHeader {
+                major: 0,
+                minor: 1,
+                patch: 0,
+            },
+            tag_list,
+        };
+        assert!(mlimage.tag_value("MISSING_TAG").is_none());
+        assert!(mlimage.tag_value_usize("MISSING_TAG").is_err());
+    }
+
+    #[test]
+    fn test_reading_int_tag() {
+        let tag_list = vec![("SOME_TAG".to_string(), "123".to_string())];
+        let mlimage = MLImage {
+            version: VersionHeader {
+                major: 0,
+                minor: 1,
+                patch: 0,
+            },
+            tag_list,
+        };
+        assert!(mlimage.tag_value("SOME_TAG").is_some());
+        assert_eq!(mlimage.tag_value("SOME_TAG").unwrap(), "123");
+        assert!(mlimage.tag_value_usize("SOME_TAG").is_ok());
+        assert_eq!(mlimage.tag_value_usize("SOME_TAG").unwrap(), 123);
     }
 
     #[test]
