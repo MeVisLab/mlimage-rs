@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::from_utf8};
+use std::{fmt::Display, str::{from_utf8, FromStr}};
 
 use nom::{
     bytes::complete::{is_not, tag},
@@ -59,7 +59,7 @@ impl TagList {
         })
     }
 
-    pub fn tag_value_usize(&self, tag_name: &str) -> Result<usize, TagError> {
+    pub fn parse_tag_value<F: FromStr>(&self, tag_name: &str) -> Result<F, TagError> {
         if let Some(value) = self.tag_value(tag_name) {
             value.parse().or(Err(TagError {
                 tag_name: tag_name.to_owned(),
@@ -220,7 +220,7 @@ mod tests {
     fn test_reading_missing_tag() {
         let tag_list = TagList(vec![("SOME_TAG".to_string(), "existing_value".to_string())]);
         assert!(tag_list.tag_value("MISSING_TAG").is_none());
-        assert!(tag_list.tag_value_usize("MISSING_TAG").is_err());
+        assert!(tag_list.parse_tag_value::<usize>("MISSING_TAG").is_err());
     }
 
     #[test]
@@ -228,8 +228,8 @@ mod tests {
         let tag_list = TagList(vec![("SOME_TAG".to_string(), "123".to_string())]);
         assert!(tag_list.tag_value("SOME_TAG").is_some());
         assert_eq!(tag_list.tag_value("SOME_TAG").unwrap(), "123");
-        assert!(tag_list.tag_value_usize("SOME_TAG").is_ok());
-        assert_eq!(tag_list.tag_value_usize("SOME_TAG").unwrap(), 123);
+        assert!(tag_list.parse_tag_value::<usize>("SOME_TAG").is_ok());
+        assert_eq!(tag_list.parse_tag_value::<usize>("SOME_TAG").unwrap(), 123);
     }
 
     #[test]
