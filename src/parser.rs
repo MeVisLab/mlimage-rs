@@ -26,10 +26,7 @@ pub struct PageIdxEntry {
     pub default_voxel_value: u16,
 }
 
-pub struct MLImage {
-    pub version: VersionHeader,
-    pub tag_list: Vec<(String, String)>,
-}
+pub struct TagList(Vec<(String, String)>);
 
 #[derive(Debug, Clone)]
 pub struct TagError {
@@ -51,9 +48,9 @@ impl Display for TagError {
     }
 }
 
-impl MLImage {
+impl TagList {
     pub fn tag_value(&self, tag_name: &str) -> Option<String> {
-        self.tag_list.iter().find_map(|(key, value)| {
+        self.0.iter().find_map(|(key, value)| {
             if key == tag_name {
                 Some(value.clone())
             } else {
@@ -75,6 +72,11 @@ impl MLImage {
             })
         }
     }
+}
+
+pub struct MLImage {
+    pub version: VersionHeader,
+    pub tag_list: TagList,
 }
 
 pub fn version_header(input: &[u8]) -> IResult<&[u8], VersionHeader> {
@@ -158,7 +160,13 @@ pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
 
     dbg!(&tag_list);
 
-    Ok((input, MLImage { version, tag_list }))
+    Ok((
+        input,
+        MLImage {
+            version,
+            tag_list: TagList(tag_list),
+        },
+    ))
 }
 
 #[cfg(test)]
@@ -210,34 +218,18 @@ mod tests {
 
     #[test]
     fn test_reading_missing_tag() {
-        let tag_list = vec![("SOME_TAG".to_string(), "existing_value".to_string())];
-        let mlimage = MLImage {
-            version: VersionHeader {
-                major: 0,
-                minor: 1,
-                patch: 0,
-            },
-            tag_list,
-        };
-        assert!(mlimage.tag_value("MISSING_TAG").is_none());
-        assert!(mlimage.tag_value_usize("MISSING_TAG").is_err());
+        let tag_list = TagList(vec![("SOME_TAG".to_string(), "existing_value".to_string())]);
+        assert!(tag_list.tag_value("MISSING_TAG").is_none());
+        assert!(tag_list.tag_value_usize("MISSING_TAG").is_err());
     }
 
     #[test]
     fn test_reading_int_tag() {
-        let tag_list = vec![("SOME_TAG".to_string(), "123".to_string())];
-        let mlimage = MLImage {
-            version: VersionHeader {
-                major: 0,
-                minor: 1,
-                patch: 0,
-            },
-            tag_list,
-        };
-        assert!(mlimage.tag_value("SOME_TAG").is_some());
-        assert_eq!(mlimage.tag_value("SOME_TAG").unwrap(), "123");
-        assert!(mlimage.tag_value_usize("SOME_TAG").is_ok());
-        assert_eq!(mlimage.tag_value_usize("SOME_TAG").unwrap(), 123);
+        let tag_list = TagList(vec![("SOME_TAG".to_string(), "123".to_string())]);
+        assert!(tag_list.tag_value("SOME_TAG").is_some());
+        assert_eq!(tag_list.tag_value("SOME_TAG").unwrap(), "123");
+        assert!(tag_list.tag_value_usize("SOME_TAG").is_ok());
+        assert_eq!(tag_list.tag_value_usize("SOME_TAG").unwrap(), 123);
     }
 
     #[test]
