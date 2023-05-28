@@ -7,10 +7,11 @@ use nom::{
     bytes::complete::{is_not, tag},
     character::complete as cc,
     combinator::map,
+    error::{Error, ErrorKind},
     multi::{count, many0},
     number::complete as nc,
     sequence::{pair, preceded, terminated, tuple},
-    IResult,
+    Err, IResult,
 };
 
 pub struct VersionHeader {
@@ -28,6 +29,8 @@ pub struct PageIdxEntry {
     pub internal: [u8; 11],
     pub default_voxel_value: u16,
 }
+
+type PageIdxTable = ndarray::Array6<PageIdxEntry>;
 
 pub struct TagList(Vec<(String, String)>);
 
@@ -80,6 +83,7 @@ impl TagList {
 pub struct MLImage {
     pub version: VersionHeader,
     pub tag_list: TagList,
+    pub page_idx_table: PageIdxTable,
 }
 
 pub fn version_header(input: &[u8]) -> IResult<&[u8], VersionHeader> {
@@ -156,10 +160,10 @@ pub fn parse_page_idx_entry(input: &[u8]) -> IResult<&[u8], PageIdxEntry> {
 pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
     let (tag_list_input, version) = version_header(input)?;
 
-    let (input, tag_list_size) = tag_list_size_in_bytes(tag_list_input)?;
+    let (_input, tag_list_size) = tag_list_size_in_bytes(tag_list_input)?;
 
-    let (tag_list_input, rest) = tag_list_input.split_at(tag_list_size);
-    let (nothing, tag_list) = tag_list(tag_list_input)?;
+    let (tag_list_input, input) = tag_list_input.split_at(tag_list_size);
+    let (_nothing, tag_list) = tag_list(tag_list_input)?;
     dbg!(&tag_list);
     let tag_list = TagList(tag_list);
 
@@ -183,8 +187,35 @@ pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
                 .ok()
         })
         .collect();
+    let page_count_per_dim: Vec<usize> = image_extent
+        .iter()
+        .zip(page_extent.iter())
+        .map(|(ie, pe)| num::Integer::div_ceil(ie, pe))
+        .collect();
+    let page_count_per_dim: [usize; 6] = page_count_per_dim
+        .try_into()
+        .map_err(|_| Err::Error(Error::new(input, ErrorKind::Alt)))?;
+    let total_page_count = page_count_per_dim.iter().fold(1, |res, c| res * c);
 
-    Ok((input, MLImage { version, tag_list }))
+    let mut pages = Vec::new();
+    let mut input = input;
+    for _i in 0..total_page_count {
+        let (rest, page_idx_entry) = parse_page_idx_entry(input)?;
+        pages.push(page_idx_entry);
+        input = rest;
+    }
+    let page_idx_table = ndarray::Array::from_vec(pages)
+        .into_shape(page_count_per_dim)
+        .expect("reshaping should not fail");
+
+    Ok((
+        input,
+        MLImage {
+            version,
+            tag_list,
+            page_idx_table,
+        },
+    ))
 }
 
 #[cfg(test)]
