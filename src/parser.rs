@@ -26,7 +26,7 @@ pub struct PageIdxEntry {
     pub is_compressed: bool,
     pub checksum: u32, // 24 bit
     pub flag_byte: u8,
-    pub internal: [u8; 11],
+    // TODO: remove from PageIdxEntry? Size varies in any case.
     pub default_voxel_value: u16,
 }
 
@@ -138,7 +138,7 @@ pub fn parse_page_idx_entry(input: &[u8]) -> IResult<&[u8], PageIdxEntry> {
         (checksum_low as u32) | (checksum_med as u32) << 8 | (checksum_high as u32) << 16;
 
     let (input, internal) = count(nc::u8, 11)(input)?;
-    let internal: [u8; 11] = internal.try_into().unwrap();
+    let _internal: [u8; 11] = internal.try_into().unwrap();
 
     // FIXME: depends on voxel type!
     let (input, default_voxel_value) = nc::le_u16(input)?;
@@ -151,7 +151,6 @@ pub fn parse_page_idx_entry(input: &[u8]) -> IResult<&[u8], PageIdxEntry> {
             is_compressed,
             checksum,
             flag_byte,
-            internal,
             default_voxel_value,
         },
     ))
