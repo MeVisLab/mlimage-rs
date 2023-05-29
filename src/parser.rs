@@ -127,9 +127,12 @@ pub fn tag_list(input: &[u8]) -> IResult<&[u8], Vec<(String, String)>> {
 }
 
 // see http://mevislabdownloads.mevis.de/docs/current/MeVisLab/Resources/Documentation/Publish/SDK/ToolBoxReference/mlImageFormatIdxTable_8h_source.html
-pub fn parse_page_idx_entry(input: &[u8]) -> IResult<&[u8], PageIdxEntry> {
+pub fn parse_page_idx_entry(
+    endianess: nom::number::Endianness,
+    input: &[u8],
+) -> IResult<&[u8], PageIdxEntry> {
     let (input, (start_offset, end_offset, is_compressed)) =
-        tuple((nc::le_u64, nc::le_u64, nc::u8))(input)?;
+        tuple((nc::u64(endianess), nc::u64(endianess), nc::u8))(input)?;
     let is_compressed = is_compressed > 0;
 
     let (input, (checksum_low, checksum_med, checksum_high, flag_byte)) =
@@ -141,7 +144,7 @@ pub fn parse_page_idx_entry(input: &[u8]) -> IResult<&[u8], PageIdxEntry> {
     let _internal: [u8; 11] = internal.try_into().unwrap();
 
     // FIXME: depends on voxel type!
-    let (input, default_voxel_value) = nc::le_u16(input)?;
+    let (input, default_voxel_value) = nc::u16(endianess)(input)?;
 
     Ok((
         input,
@@ -165,6 +168,16 @@ pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
     let (_nothing, tag_list) = tag_list(tag_list_input)?;
     dbg!(&tag_list);
     let tag_list = TagList(tag_list);
+
+    let endianess = if tag_list
+        .parse_tag_value::<u8>("ML_ENDIANESS")
+        .map_err(|_| Err::Error(Error::new(input, ErrorKind::Tag)))?
+        > 0
+    {
+        nom::number::Endianness::Big
+    } else {
+        nom::number::Endianness::Little
+    };
 
     // FIXME: how to do error handling with nom?
     let dtype_size: usize = tag_list.parse_tag_value("ML_IMAGE_DTYPE_SIZE").unwrap();
@@ -193,13 +206,13 @@ pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
         .collect();
     let page_count_per_dim: [usize; 6] = page_count_per_dim
         .try_into()
-        .map_err(|_| Err::Error(Error::new(input, ErrorKind::Alt)))?;
+        .map_err(|_| Err::Error(Error::new(input, ErrorKind::Tag)))?;
     let total_page_count = page_count_per_dim.iter().fold(1, |res, c| res * c);
 
     let mut pages = Vec::new();
     let mut input = input;
     for _i in 0..total_page_count {
-        let (rest, page_idx_entry) = parse_page_idx_entry(input)?;
+        let (rest, page_idx_entry) = parse_page_idx_entry(endianess, input)?;
         pages.push(page_idx_entry);
         input = rest;
     }
