@@ -6,7 +6,7 @@ use std::{
 use nom::{
     bytes::complete::{is_not, tag},
     character::complete as cc,
-    combinator::map,
+    combinator::{map, opt},
     error::{Error, ErrorKind},
     multi::{count, many0},
     number::complete as nc,
@@ -103,7 +103,9 @@ pub fn version_header(input: &[u8]) -> IResult<&[u8], VersionHeader> {
 
 pub fn tag_string(input: &[u8]) -> IResult<&[u8], String> {
     terminated(
-        map(is_not("\0"), |buf| from_utf8(buf).unwrap().to_owned()),
+        map(opt(is_not("\0")), |buf| {
+            from_utf8(buf.unwrap_or_default()).unwrap().to_owned()
+        }),
         tag(b"\0"),
     )(input)
 }
@@ -296,6 +298,18 @@ mod tests {
     #[test]
     fn test_file() {
         let asset = include_bytes!("../assets/test_32x32x8.mlimage");
+    #[test]
+    fn test_image_data_uncompressed() {
+        let asset = include_bytes!("../assets/test_32x32x8_None.mlimage");
+        let result = parse_file(asset);
+        assert!(result.is_ok());
+        if let Some((_rest, image)) = result.ok() {
+            let idx_entry = &image.page_idx_table[[0, 0, 0, 0, 0, 0]];
+            let raw_data = &asset[idx_entry.start_offset.try_into().unwrap()
+                ..idx_entry.end_offset.try_into().unwrap()];
+        }
+    }
+
         let result = parse_file(asset);
         assert!(result.is_ok());
         if let Some((_rest, image)) = result.ok() {
