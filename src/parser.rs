@@ -14,12 +14,14 @@ use nom::{
     Err, IResult,
 };
 
+#[derive(Debug)]
 pub struct VersionHeader {
     pub major: u16,
     pub minor: u16,
     pub patch: u16,
 }
 
+#[derive(Debug)]
 pub struct PageIdxEntry {
     pub start_offset: u64,
     pub end_offset: u64,
@@ -32,11 +34,13 @@ pub struct PageIdxEntry {
 
 type PageIdxTable = ndarray::Array6<PageIdxEntry>;
 
+#[derive(Debug)]
 pub struct TagList(Vec<(String, String)>);
 
 #[derive(Debug, Clone)]
 pub struct TagError {
     pub tag_name: String,
+    /// None means that the tag was missing, otherwise it could not be parsed
     pub tag_value: Option<String>,
 }
 
@@ -80,10 +84,14 @@ impl TagList {
     }
 }
 
+#[derive(Debug)]
 pub struct MLImage {
     pub version: VersionHeader,
+    pub endianess: nom::number::Endianness,
     pub tag_list: TagList,
     pub page_idx_table: PageIdxTable,
+    pub uses_partial_pages: bool,
+    pub world_matrix: ndarray::Array2<f64>,
 }
 
 pub fn version_header(input: &[u8]) -> IResult<&[u8], VersionHeader> {
@@ -168,7 +176,6 @@ pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
 
     let (tag_list_input, input) = tag_list_input.split_at(tag_list_size);
     let (_nothing, tag_list) = tag_list(tag_list_input)?;
-    dbg!(&tag_list);
     let tag_list = TagList(tag_list);
 
     let endianess = if tag_list
@@ -181,7 +188,6 @@ pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
         nom::number::Endianness::Little
     };
 
-    // FIXME: how to do error handling with nom?
     let dtype_size: usize = tag_list.parse_tag_value("ML_IMAGE_DTYPE_SIZE").unwrap();
     assert_eq!(dtype_size, 2);
 
@@ -222,18 +228,36 @@ pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
         .into_shape(page_count_per_dim)
         .expect("reshaping should not fail");
 
+    let uses_partial_pages = tag_list
+        .parse_tag_value::<i8>("ML_USES_PARTIAL_PAGES")
+        .map_or(false, |pp| pp > 0);
+
+    let mut world_matrix = ndarray::Array2::zeros((4, 4));
+    for row in 0..4 {
+        for col in 0..4 {
+            world_matrix[(row, col)] = tag_list
+                .parse_tag_value(&format!("ML_WORLD_MATRIX_{}{}", row, col))
+                .map_err(|_| Err::Error(Error::new(input, ErrorKind::Tag)))?;
+        }
+    }
+
     Ok((
         input,
         MLImage {
             version,
+            endianess,
             tag_list,
             page_idx_table,
+            uses_partial_pages,
+            world_matrix,
         },
     ))
 }
 
 #[cfg(test)]
 mod tests {
+    use lz4_flex::decompress;
+
     use super::*;
 
     #[test]
@@ -297,7 +321,15 @@ mod tests {
 
     #[test]
     fn test_file() {
-        let asset = include_bytes!("../assets/test_32x32x8.mlimage");
+        let asset = include_bytes!("../assets/test_32x32x8_LZ4.mlimage");
+        let result = parse_file(asset);
+        assert!(result.is_ok());
+        if let Some((_rest, image)) = result.ok() {
+            assert_eq!(image.version.major, 0);
+            assert_eq!(image.version.minor, 1);
+        }
+    }
+
     #[test]
     fn test_image_data_uncompressed() {
         let asset = include_bytes!("../assets/test_32x32x8_None.mlimage");
@@ -305,16 +337,33 @@ mod tests {
         assert!(result.is_ok());
         if let Some((_rest, image)) = result.ok() {
             let idx_entry = &image.page_idx_table[[0, 0, 0, 0, 0, 0]];
-            let raw_data = &asset[idx_entry.start_offset.try_into().unwrap()
+            let _raw_data = &asset[idx_entry.start_offset.try_into().unwrap()
                 ..idx_entry.end_offset.try_into().unwrap()];
+            //let uint16_data:
         }
     }
 
+    #[test]
+    fn test_image_data_lz4() {
+        let asset = include_bytes!("../assets/test_32x32x8_LZ4.mlimage");
         let result = parse_file(asset);
         assert!(result.is_ok());
         if let Some((_rest, image)) = result.ok() {
-            assert_eq!(image.version.major, 0);
-            assert_eq!(image.version.minor, 1);
+            let idx_entry = &image.page_idx_table[[0, 0, 0, 0, 0, 0]];
+
+            // 2023-09-09: I checked the start/end offsets, and they're really file offsets:
+            let raw_data = &asset[idx_entry.start_offset.try_into().unwrap()
+                ..idx_entry.end_offset.try_into().unwrap()];
+
+            // TODO: unwrap() -> ?
+            let (raw_data, (uncompressed_size, _flags)) =
+                tuple((nc::i64::<&[u8], ()>(image.endianess), nc::i64(image.endianess)))(raw_data).unwrap();
+                        
+            let decompressed = decompress(raw_data, usize::try_from(uncompressed_size).unwrap()).expect("decompression failed");
+            //let mut decomp = lz4_flex::frame::FrameDecoder::new(raw_data);
+            //let mut decompressed: Vec<u8> = Vec::new();
+            //std::io::copy(&mut decomp, &mut decompressed).expect("decompression failed");
+            dbg!(decompressed);
         }
     }
 }
