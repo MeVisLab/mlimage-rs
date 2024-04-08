@@ -215,7 +215,7 @@ pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
     let page_count_per_dim: [usize; 6] = page_count_per_dim
         .try_into()
         .map_err(|_| Err::Error(Error::new(input, ErrorKind::Tag)))?;
-    let total_page_count = page_count_per_dim.iter().fold(1, |res, c| res * c);
+    let total_page_count = page_count_per_dim.iter().product::<usize>();
 
     let mut pages = Vec::new();
     let mut input = input;
