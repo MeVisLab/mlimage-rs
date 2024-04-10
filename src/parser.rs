@@ -28,7 +28,7 @@ pub struct PageIdxEntry {
     pub checksum: u32, // 24 bit
     pub flag_byte: u8,
     // TODO: remove from PageIdxEntry? Size varies in any case.
-    pub default_voxel_value: u16,
+    pub raw_voxel_value: Vec<u8>,
 }
 
 type PageIdxTable = ndarray::Array6<PageIdxEntry>;
@@ -151,6 +151,7 @@ pub fn tag_list(input: &mut &[u8]) -> PResult<Vec<(String, String)>> {
 // see http://mevislabdownloads.mevis.de/docs/current/MeVisLab/Resources/Documentation/Publish/SDK/ToolBoxReference/mlImageFormatIdxTable_8h_source.html
 fn parse_page_idx_entry<Input, Error>(
     endianess: winnow::binary::Endianness,
+    dtype_size: usize,
 ) -> impl Parser<Input, PageIdxEntry, Error>
 where
     Input: StreamIsPartial + Stream<Token = u8>,
@@ -165,8 +166,8 @@ where
         wb::u8,
         wb::u8,
         wb::u8,
-        repeat::<_, _, Vec<_>, _, _>(11, wb::u8),
-        wb::u16(endianess), // FIXME: depends on voxel type!
+        repeat::<_, _, Vec<_>, _, _>(11, wb::u8).void(),
+        repeat(dtype_size, wb::u8),
     )
         .map(
             |(
@@ -178,7 +179,7 @@ where
                 checksum_high,
                 flag_byte,
                 _internal,
-                default_voxel_value,
+                raw_voxel_value,
             )| {
                 let is_compressed = is_compressed > 0;
                 let checksum = (checksum_low as u32)
@@ -190,7 +191,7 @@ where
                     is_compressed,
                     checksum,
                     flag_byte,
-                    default_voxel_value,
+                    raw_voxel_value,
                 }
             },
         )
@@ -222,7 +223,6 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
     };
 
     let dtype_size: usize = tag_list.parse_tag_value("ML_IMAGE_DTYPE_SIZE").unwrap();
-    assert_eq!(dtype_size, 2);
 
     let image_extent: Vec<usize> = "XYZCTU"
         .chars()
@@ -251,7 +251,7 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
     let total_page_count = page_count_per_dim.iter().product::<usize>();
 
     let pages: Vec<_> =
-        repeat(total_page_count, parse_page_idx_entry(endianess)).parse_next(input)?;
+        repeat(total_page_count, parse_page_idx_entry(endianess, dtype_size)).parse_next(input)?;
 
     let page_idx_table = ndarray::Array::from_vec(pages)
         .into_shape(page_count_per_dim)
