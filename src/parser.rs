@@ -200,21 +200,17 @@ where
 pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
     let version = version_header.parse_next(input)?;
 
-    // tag_list_size includes this first tag pair, so we need to take a backup of the input:
-    let peek_tag_list_input = &mut &input[..];
-    let tag_list_size = tag_list_size_in_bytes.parse_next(peek_tag_list_input)?;
+    // tag_list_size includes this first tag pair, so we need to checkpoint the input:
+    let tag_list_begin = input.checkpoint();
+    let tag_list_size = tag_list_size_in_bytes.parse_next(input)?;
+    input.reset(&tag_list_begin);
 
-    // TODO: is the split_at() + parse() ideomatic?
-    // it requires a relatively ugly error wrapping
-    let (tag_list_input, input) = input.split_at(tag_list_size);
-    let tag_list_input = &mut &(*tag_list_input); // we need to re-establish a mutable cursor after the split_at()
-    let input = &mut &(*input); // we need to re-establish a mutable cursor after the split_at()
-
-    let tag_list = TagList(tag_list.parse_next(tag_list_input)?);
+    let tag_list_buffer: Vec<_> = repeat(tag_list_size, wb::u8).parse_next(input)?;
+    let tag_list = TagList(tag_list.parse_next(&mut &tag_list_buffer[..])?);
 
     let endianess = if tag_list
         .parse_tag_value::<u8>("ML_ENDIANESS")
-        .map_err(|e| ErrMode::from_external_error(&tag_list_input, ErrorKind::Tag, e))?
+        .map_err(|e| ErrMode::from_external_error(&tag_list_begin, ErrorKind::Tag, e))?
         > 0
     {
         winnow::binary::Endianness::Big
@@ -250,8 +246,11 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
         .map_err(|_| ErrMode::Cut(ContextError::new()))?;
     let total_page_count = page_count_per_dim.iter().product::<usize>();
 
-    let pages: Vec<_> =
-        repeat(total_page_count, parse_page_idx_entry(endianess, dtype_size)).parse_next(input)?;
+    let pages: Vec<_> = repeat(
+        total_page_count,
+        parse_page_idx_entry(endianess, dtype_size),
+    )
+    .parse_next(input)?;
 
     let page_idx_table = ndarray::Array::from_vec(pages)
         .into_shape(page_count_per_dim)
@@ -268,7 +267,7 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
                 .parse_tag_value(&format!("ML_WORLD_MATRIX_{}{}", row, col))
                 .map_err(|e| {
                     ErrMode::Cut(ContextError::from_external_error(
-                        &tag_list_input,
+                        &tag_list_begin,
                         ErrorKind::Tag,
                         e,
                     ))
