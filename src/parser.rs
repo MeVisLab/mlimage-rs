@@ -3,15 +3,14 @@ use std::{
     str::{from_utf8, FromStr},
 };
 
-use nom::{
-    bytes::complete::{is_not, tag},
-    character::complete as cc,
-    combinator::{map, opt},
-    error::{Error, ErrorKind},
-    multi::{count, many0},
-    number::complete as nc,
-    sequence::{pair, preceded, terminated, tuple},
-    Err, IResult,
+use winnow::{
+    ascii::{dec_uint, digit0, space0},
+    binary as wb,
+    combinator::{delimited, repeat, terminated},
+    error::{ContextError, ErrMode, ErrorKind, FromExternalError, ParserError},
+    stream::{AsBytes, Stream, StreamIsPartial},
+    token::take_until,
+    PResult, Parser,
 };
 
 #[derive(Debug)]
@@ -43,6 +42,8 @@ pub struct TagError {
     /// None means that the tag was missing, otherwise it could not be parsed
     pub tag_value: Option<String>,
 }
+
+impl std::error::Error for TagError {}
 
 impl Display for TagError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -87,105 +88,137 @@ impl TagList {
 #[derive(Debug)]
 pub struct MLImage {
     pub version: VersionHeader,
-    pub endianess: nom::number::Endianness,
+    pub endianess: winnow::binary::Endianness,
     pub tag_list: TagList,
     pub page_idx_table: PageIdxTable,
     pub uses_partial_pages: bool,
     pub world_matrix: ndarray::Array2<f64>,
 }
 
-pub fn version_header(input: &[u8]) -> IResult<&[u8], VersionHeader> {
-    let (input, _header) = tag("MLImageFormatVersion.")(input)?;
-    let (input, major) = terminated(cc::u16, cc::char('.'))(input)?;
-    let (input, minor) = terminated(cc::u16, cc::char('.'))(input)?;
-    let (input, patch) = terminated(cc::u16, cc::char('\0'))(input)?;
-    Ok((
-        input,
-        VersionHeader {
-            major,
-            minor,
-            patch,
-        },
-    ))
+// like dec_uint(), but accepts leading zeros (and is less optimized)
+fn parse_uint<T>(input: &mut &[u8]) -> PResult<T>
+where
+    T: FromStr,
+{
+    digit0
+        .verify_map(|s: &[u8]| {
+            std::str::from_utf8(s)
+                .expect("we only got ASCII input")
+                .parse::<T>()
+                .ok()
+        })
+        .parse_next(input)
 }
 
-pub fn tag_string(input: &[u8]) -> IResult<&[u8], String> {
-    terminated(
-        map(opt(is_not("\0")), |buf| {
-            from_utf8(buf.unwrap_or_default()).unwrap().to_owned()
-        }),
-        tag(b"\0"),
-    )(input)
+pub fn version_header(input: &mut &[u8]) -> PResult<VersionHeader> {
+    let (_header, major, minor, patch) = (
+        "MLImageFormatVersion.",
+        terminated(parse_uint::<u16>, '.'),
+        terminated(parse_uint::<u16>, '.'),
+        terminated(parse_uint::<u16>, '\0'),
+    )
+        .parse_next(input)?;
+    Ok(VersionHeader {
+        major,
+        minor,
+        patch,
+    })
 }
 
-pub fn tag_pair(input: &[u8]) -> IResult<&[u8], (String, String)> {
-    pair(tag_string, tag_string)(input)
+pub fn tag_string(input: &mut &[u8]) -> PResult<String> {
+    terminated(take_until(0.., 0u8), 0u8)
+        .try_map(|buf: &[u8]| from_utf8(buf).map(|s| s.to_owned()))
+        .parse_next(input)
 }
 
-pub fn tag_list_size_in_bytes(input: &[u8]) -> IResult<&[u8], usize> {
-    preceded(
-        tag("ML_TAG_LIST_SIZE_IN_BYTES\0"),
-        terminated(
-            map(cc::u64, |size| size as _),
-            pair(cc::space0, cc::char('\0')),
-        ),
-    )(input)
+pub fn tag_pair(input: &mut &[u8]) -> PResult<(String, String)> {
+    (tag_string, tag_string).parse_next(input)
 }
 
-pub fn tag_list(input: &[u8]) -> IResult<&[u8], Vec<(String, String)>> {
-    many0(tag_pair)(input)
+pub fn tag_list_size_in_bytes(input: &mut &[u8]) -> PResult<usize> {
+    delimited(
+        "ML_TAG_LIST_SIZE_IN_BYTES\0",
+        dec_uint::<_, usize, _>,
+        (space0, 0u8),
+    )
+    .parse_next(input)
+}
+
+pub fn tag_list(input: &mut &[u8]) -> PResult<Vec<(String, String)>> {
+    repeat(0.., tag_pair).parse_next(input)
 }
 
 // see http://mevislabdownloads.mevis.de/docs/current/MeVisLab/Resources/Documentation/Publish/SDK/ToolBoxReference/mlImageFormatIdxTable_8h_source.html
-pub fn parse_page_idx_entry(
-    endianess: nom::number::Endianness,
-    input: &[u8],
-) -> IResult<&[u8], PageIdxEntry> {
-    let (input, (start_offset, end_offset, is_compressed)) =
-        tuple((nc::u64(endianess), nc::u64(endianess), nc::u8))(input)?;
-    let is_compressed = is_compressed > 0;
-
-    let (input, (checksum_low, checksum_med, checksum_high, flag_byte)) =
-        tuple((nc::u8, nc::u8, nc::u8, nc::u8))(input)?;
-    let checksum =
-        (checksum_low as u32) | (checksum_med as u32) << 8 | (checksum_high as u32) << 16;
-
-    let (input, internal) = count(nc::u8, 11)(input)?;
-    let _internal: [u8; 11] = internal.try_into().unwrap();
-
-    // FIXME: depends on voxel type!
-    let (input, default_voxel_value) = nc::u16(endianess)(input)?;
-
-    Ok((
-        input,
-        PageIdxEntry {
-            start_offset,
-            end_offset,
-            is_compressed,
-            checksum,
-            flag_byte,
-            default_voxel_value,
-        },
-    ))
+fn parse_page_idx_entry<Input, Error>(
+    endianess: winnow::binary::Endianness,
+) -> impl Parser<Input, PageIdxEntry, Error>
+where
+    Input: StreamIsPartial + Stream<Token = u8>,
+    <Input as Stream>::Slice: AsBytes,
+    Error: ParserError<Input>,
+{
+    (
+        wb::u64(endianess),
+        wb::u64(endianess),
+        wb::u8,
+        wb::u8,
+        wb::u8,
+        wb::u8,
+        wb::u8,
+        repeat::<_, _, Vec<_>, _, _>(11, wb::u8),
+        wb::u16(endianess), // FIXME: depends on voxel type!
+    )
+        .map(
+            |(
+                start_offset,
+                end_offset,
+                is_compressed,
+                checksum_low,
+                checksum_med,
+                checksum_high,
+                flag_byte,
+                _internal,
+                default_voxel_value,
+            )| {
+                let is_compressed = is_compressed > 0;
+                let checksum = (checksum_low as u32)
+                    | (checksum_med as u32) << 8
+                    | (checksum_high as u32) << 16;
+                PageIdxEntry {
+                    start_offset,
+                    end_offset,
+                    is_compressed,
+                    checksum,
+                    flag_byte,
+                    default_voxel_value,
+                }
+            },
+        )
 }
 
-pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
-    let (tag_list_input, version) = version_header(input)?;
+pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
+    let version = version_header.parse_next(input)?;
 
-    let (_input, tag_list_size) = tag_list_size_in_bytes(tag_list_input)?;
+    // tag_list_size includes this first tag pair, so we need to take a backup of the input:
+    let peek_tag_list_input = &mut &input[..];
+    let tag_list_size = tag_list_size_in_bytes.parse_next(peek_tag_list_input)?;
 
-    let (tag_list_input, input) = tag_list_input.split_at(tag_list_size);
-    let (_nothing, tag_list) = tag_list(tag_list_input)?;
-    let tag_list = TagList(tag_list);
+    // TODO: is the split_at() + parse() ideomatic?
+    // it requires a relatively ugly error wrapping
+    let (tag_list_input, input) = input.split_at(tag_list_size);
+    let tag_list_input = &mut &(*tag_list_input); // we need to re-establish a mutable cursor after the split_at()
+    let input = &mut &(*input); // we need to re-establish a mutable cursor after the split_at()
+
+    let tag_list = TagList(tag_list.parse_next(tag_list_input)?);
 
     let endianess = if tag_list
         .parse_tag_value::<u8>("ML_ENDIANESS")
-        .map_err(|_| Err::Error(Error::new(input, ErrorKind::Tag)))?
+        .map_err(|e| ErrMode::from_external_error(&tag_list_input, ErrorKind::Tag, e))?
         > 0
     {
-        nom::number::Endianness::Big
+        winnow::binary::Endianness::Big
     } else {
-        nom::number::Endianness::Little
+        winnow::binary::Endianness::Little
     };
 
     let dtype_size: usize = tag_list.parse_tag_value("ML_IMAGE_DTYPE_SIZE").unwrap();
@@ -214,16 +247,12 @@ pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
         .collect();
     let page_count_per_dim: [usize; 6] = page_count_per_dim
         .try_into()
-        .map_err(|_| Err::Error(Error::new(input, ErrorKind::Tag)))?;
+        .map_err(|_| ErrMode::Cut(ContextError::new()))?;
     let total_page_count = page_count_per_dim.iter().product::<usize>();
 
-    let mut pages = Vec::new();
-    let mut input = input;
-    for _i in 0..total_page_count {
-        let (rest, page_idx_entry) = parse_page_idx_entry(endianess, input)?;
-        pages.push(page_idx_entry);
-        input = rest;
-    }
+    let pages: Vec<_> =
+        repeat(total_page_count, parse_page_idx_entry(endianess)).parse_next(input)?;
+
     let page_idx_table = ndarray::Array::from_vec(pages)
         .into_shape(page_count_per_dim)
         .expect("reshaping should not fail");
@@ -237,21 +266,24 @@ pub fn parse_file(input: &[u8]) -> IResult<&[u8], MLImage> {
         for col in 0..4 {
             world_matrix[(row, col)] = tag_list
                 .parse_tag_value(&format!("ML_WORLD_MATRIX_{}{}", row, col))
-                .map_err(|_| Err::Error(Error::new(input, ErrorKind::Tag)))?;
+                .map_err(|e| {
+                    ErrMode::Cut(ContextError::from_external_error(
+                        &tag_list_input,
+                        ErrorKind::Tag,
+                        e,
+                    ))
+                })?;
         }
     }
 
-    Ok((
-        input,
-        MLImage {
-            version,
-            endianess,
-            tag_list,
-            page_idx_table,
-            uses_partial_pages,
-            world_matrix,
-        },
-    ))
+    Ok(MLImage {
+        version,
+        endianess,
+        tag_list,
+        page_idx_table,
+        uses_partial_pages,
+        world_matrix,
+    })
 }
 
 #[cfg(test)]
@@ -262,44 +294,41 @@ mod tests {
 
     #[test]
     fn test_version_string() {
-        let result = version_header(b"MLImageFormatVersion.000.001.000\0");
+        let result = version_header.parse(b"MLImageFormatVersion.000.001.000\0");
         assert!(result.is_ok());
-        if let Some((rest, result_version)) = result.ok() {
+        if let Some(result_version) = result.ok() {
             assert_eq!(result_version.major, 0);
             assert_eq!(result_version.minor, 1);
             assert_eq!(result_version.patch, 0);
-            assert_eq!(rest.len(), 0);
         }
     }
 
     #[test]
     fn test_tag_string() {
-        let result = tag_string(b"ML_ENDIANESS\0");
+        let result = tag_string.parse(b"ML_ENDIANESS\0");
         assert!(result.is_ok());
-        if let Some((rest, result_string)) = result.ok() {
+        if let Some(result_string) = result.ok() {
             assert_eq!(&result_string, "ML_ENDIANESS");
-            assert_eq!(rest.len(), 0);
         }
     }
 
     #[test]
     fn test_tag_pair() {
-        let result = tag_pair(b"ML_ENDIANESS\00\0");
+        let result = tag_pair.parse(b"ML_ENDIANESS\00\0");
         assert!(result.is_ok());
-        if let Some((rest, (tag_name, tag_value))) = result.ok() {
+        if let Some((tag_name, tag_value)) = result.ok() {
             assert_eq!(&tag_name, "ML_ENDIANESS");
             assert_eq!(&tag_value, "0");
-            assert_eq!(rest.len(), 0);
         }
     }
 
     #[test]
     fn test_tag_list_size_in_bytes() {
-        let result = tag_list_size_in_bytes(b"ML_TAG_LIST_SIZE_IN_BYTES\01115           \0");
+        let result = tag_list_size_in_bytes.parse(b"ML_TAG_LIST_SIZE_IN_BYTES\01115           \0");
+        dbg!(&result);
         assert!(result.is_ok());
-        if let Some((rest, size)) = result.ok() {
+        if let Some(size) = result.ok() {
             assert_eq!(size, 1115);
-            assert_eq!(rest.len(), 0);
         }
     }
 
@@ -320,11 +349,23 @@ mod tests {
     }
 
     #[test]
+    fn test_tag_list() {
+        let asset = include_bytes!("../assets/test_32x32x8_LZ4.mlimage");
+        let tag_list_buf = &asset[0x21..0x21 + 1211];
+        let result = tag_list.parse(tag_list_buf);
+        if let Err(e) = &result {
+            hexdump::hexdump(e.input());
+            println!("Error at position {:#04x}", e.offset());
+            assert!(false);
+        }
+    }
+
+    #[test]
     fn test_file() {
         let asset = include_bytes!("../assets/test_32x32x8_LZ4.mlimage");
-        let result = parse_file(asset);
+        let result = parse_file.parse_next(&mut &asset[..]);
         assert!(result.is_ok());
-        if let Some((_rest, image)) = result.ok() {
+        if let Some(image) = result.ok() {
             assert_eq!(image.version.major, 0);
             assert_eq!(image.version.minor, 1);
         }
@@ -333,9 +374,9 @@ mod tests {
     #[test]
     fn test_image_data_uncompressed() {
         let asset = include_bytes!("../assets/test_32x32x8_None.mlimage");
-        let result = parse_file(asset);
+        let result = parse_file.parse_next(&mut &asset[..]);
         assert!(result.is_ok());
-        if let Some((_rest, image)) = result.ok() {
+        if let Some(image) = result.ok() {
             let idx_entry = &image.page_idx_table[[0, 0, 0, 0, 0, 0]];
             let _raw_data = &asset[idx_entry.start_offset.try_into().unwrap()
                 ..idx_entry.end_offset.try_into().unwrap()];
@@ -346,20 +387,25 @@ mod tests {
     #[test]
     fn test_image_data_lz4() {
         let asset = include_bytes!("../assets/test_32x32x8_LZ4.mlimage");
-        let result = parse_file(asset);
+        let result = parse_file.parse_next(&mut &asset[..]);
         assert!(result.is_ok());
-        if let Some((_rest, image)) = result.ok() {
+        if let Some(image) = result.ok() {
             let idx_entry = &image.page_idx_table[[0, 0, 0, 0, 0, 0]];
 
             // 2023-09-09: I checked the start/end offsets, and they're really file offsets:
-            let raw_data = &asset[idx_entry.start_offset.try_into().unwrap()
+            let raw_data = &mut &asset[idx_entry.start_offset.try_into().unwrap()
                 ..idx_entry.end_offset.try_into().unwrap()];
 
             // TODO: unwrap() -> ?
-            let (raw_data, (uncompressed_size, _flags)) =
-                tuple((nc::i64::<&[u8], ()>(image.endianess), nc::i64(image.endianess)))(raw_data).unwrap();
-                        
-            let decompressed = decompress(raw_data, usize::try_from(uncompressed_size).unwrap()).expect("decompression failed");
+            let (uncompressed_size, _flags) = ((
+                wb::i64::<&[u8], ()>(image.endianess),
+                wb::i64(image.endianess),
+            ))
+                .parse_next(raw_data)
+                .unwrap();
+
+            let decompressed = decompress(raw_data, usize::try_from(uncompressed_size).unwrap())
+                .expect("decompression failed");
             //let mut decomp = lz4_flex::frame::FrameDecoder::new(raw_data);
             //let mut decompressed: Vec<u8> = Vec::new();
             //std::io::copy(&mut decomp, &mut decompressed).expect("decompression failed");
