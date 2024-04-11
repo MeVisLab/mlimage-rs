@@ -88,7 +88,7 @@ impl TagList {
 #[derive(Debug)]
 pub struct MLImage {
     pub version: VersionHeader,
-    pub endianess: winnow::binary::Endianness,
+    pub endianness: winnow::binary::Endianness,
     pub tag_list: TagList,
     pub page_idx_table: PageIdxTable,
     pub uses_partial_pages: bool,
@@ -143,7 +143,7 @@ pub fn tag_list(input: &mut &[u8]) -> PResult<Vec<(String, String)>> {
 
 // see http://mevislabdownloads.mevis.de/docs/current/MeVisLab/Resources/Documentation/Publish/SDK/ToolBoxReference/mlImageFormatIdxTable_8h_source.html
 fn parse_page_idx_entry<Input, Error>(
-    endianess: winnow::binary::Endianness,
+    endianness: winnow::binary::Endianness,
     dtype_size: usize,
 ) -> impl Parser<Input, PageIdxEntry, Error>
 where
@@ -152,8 +152,8 @@ where
     Error: ParserError<Input>,
 {
     (
-        wb::u64(endianess),
-        wb::u64(endianess),
+        wb::u64(endianness),
+        wb::u64(endianness),
         wb::u8,
         wb::u8,
         wb::u8,
@@ -201,7 +201,7 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
     let tag_list_buffer: Vec<_> = repeat(tag_list_size, wb::u8).parse_next(input)?;
     let tag_list = TagList(tag_list.parse_next(&mut &tag_list_buffer[..])?);
 
-    let endianess = if tag_list
+    let endianness = if tag_list
         .parse_tag_value::<u8>("ML_ENDIANESS")
         .map_err(|e| ErrMode::from_external_error(&tag_list_begin, ErrorKind::Tag, e))?
         > 0
@@ -241,7 +241,7 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
 
     let pages: Vec<_> = repeat(
         total_page_count,
-        parse_page_idx_entry(endianess, dtype_size),
+        parse_page_idx_entry(endianness, dtype_size),
     )
     .parse_next(input)?;
 
@@ -270,7 +270,7 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
 
     Ok(MLImage {
         version,
-        endianess,
+        endianness,
         tag_list,
         page_idx_table,
         uses_partial_pages,
@@ -297,19 +297,19 @@ mod tests {
 
     #[test]
     fn test_tag_string() {
-        let result = tag_string.parse(b"ML_ENDIANESS\0");
+        let result = tag_string.parse(b"ML_ENDIANESS\0"); // sic
         assert!(result.is_ok());
         if let Some(result_string) = result.ok() {
-            assert_eq!(&result_string, "ML_ENDIANESS");
+            assert_eq!(&result_string, "ML_ENDIANESS"); // sic
         }
     }
 
     #[test]
     fn test_tag_pair() {
-        let result = tag_pair.parse(b"ML_ENDIANESS\00\0");
+        let result = tag_pair.parse(b"ML_ENDIANESS\00\0"); // sic
         assert!(result.is_ok());
         if let Some((tag_name, tag_value)) = result.ok() {
-            assert_eq!(&tag_name, "ML_ENDIANESS");
+            assert_eq!(&tag_name, "ML_ENDIANESS"); // sic
             assert_eq!(&tag_value, "0");
         }
     }
@@ -390,8 +390,8 @@ mod tests {
 
             // TODO: unwrap() -> ?
             let (uncompressed_size, _flags) = ((
-                wb::i64::<&[u8], ()>(image.endianess),
-                wb::i64(image.endianess),
+                wb::i64::<&[u8], ()>(image.endianness),
+                wb::i64(image.endianness),
             ))
                 .parse_next(raw_data)
                 .unwrap();
