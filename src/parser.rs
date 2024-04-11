@@ -4,7 +4,7 @@ use std::{
 };
 
 use winnow::{
-    ascii::{dec_uint, digit0, space0},
+    ascii::{dec_uint, digit1, space0},
     binary as wb,
     combinator::{delimited, repeat, terminated},
     error::{ContextError, ErrMode, ErrorKind, FromExternalError, ParserError},
@@ -100,14 +100,7 @@ fn parse_uint<T>(input: &mut &[u8]) -> PResult<T>
 where
     T: FromStr,
 {
-    digit0
-        .verify_map(|s: &[u8]| {
-            std::str::from_utf8(s)
-                .expect("we only got ASCII input")
-                .parse::<T>()
-                .ok()
-        })
-        .parse_next(input)
+    digit1.parse_to::<T>().parse_next(input)
 }
 
 pub fn version_header(input: &mut &[u8]) -> PResult<VersionHeader> {
