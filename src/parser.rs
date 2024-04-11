@@ -6,7 +6,7 @@ use std::{
 use winnow::{
     ascii::{dec_uint, digit1, space0},
     binary as wb,
-    combinator::{delimited, repeat, terminated},
+    combinator::{delimited, preceded, repeat, terminated},
     error::{ContextError, ErrMode, ErrorKind, FromExternalError, ParserError},
     stream::{AsBytes, Stream, StreamIsPartial},
     token::take_until,
@@ -95,27 +95,21 @@ pub struct MLImage {
     pub world_matrix: ndarray::Array2<f64>,
 }
 
-// like dec_uint(), but accepts leading zeros (and is less optimized)
-fn parse_uint<T>(input: &mut &[u8]) -> PResult<T>
-where
-    T: FromStr,
-{
-    digit1.parse_to::<T>().parse_next(input)
-}
-
 pub fn version_header(input: &mut &[u8]) -> PResult<VersionHeader> {
-    let (_header, major, minor, patch) = (
+    preceded(
         "MLImageFormatVersion.",
-        terminated(parse_uint::<u16>, '.'),
-        terminated(parse_uint::<u16>, '.'),
-        terminated(parse_uint::<u16>, '\0'),
+        (
+            terminated(digit1.parse_to::<u16>(), b'.'),
+            terminated(digit1.parse_to::<u16>(), b'.'),
+            terminated(digit1.parse_to::<u16>(), b'\0'),
+        ),
     )
-        .parse_next(input)?;
-    Ok(VersionHeader {
+    .map(|(major, minor, patch)| VersionHeader {
         major,
         minor,
         patch,
     })
+    .parse_next(input)
 }
 
 pub fn tag_string(input: &mut &[u8]) -> PResult<String> {
