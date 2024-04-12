@@ -2,11 +2,12 @@ use std::{
     error::Error,
     fmt::Display,
     fs::File,
-    io::{BufReader, Read, Seek},
+    io::{BufRead, BufReader, Read, Seek},
     path::Path,
     str::{from_utf8, FromStr},
 };
 
+use ndarray::Ix;
 use winnow::{
     ascii::{dec_uint, digit1, space0},
     binary as wb,
@@ -80,7 +81,9 @@ pub struct InvalidFile {
 
 impl From<ContextError> for InvalidFile {
     fn from(error: ContextError) -> Self {
-        Self { msg: format!("{}", error) }
+        Self {
+            msg: format!("{}", error),
+        }
     }
 }
 
@@ -118,36 +121,157 @@ impl TagList {
     }
 }
 
+pub struct MLImageFormatReader {
+    version: VersionHeader,
+    info: MLImageInfo,
+    reader: BufReader<File>,
+    page_idx_table_start: u64,
+}
+
+impl MLImageFormatReader {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
+        let f = File::open(path)?;
+        let mut reader = BufReader::with_capacity(64 * 1024, f);
+        reader.fill_buf()?;
+
+        let (version, tag_list_size) = (version_header, tag_list_size_in_bytes)
+            .parse_next(&mut reader.buffer())
+            .map_err(|_| IncompleteFile::default())?;
+        let page_idx_table_start = VERSION_HEADER_SIZE + tag_list_size;
+
+        let info = if reader.capacity() >= page_idx_table_start {
+            parse_file.parse_next(&mut reader.buffer())
+        } else {
+            reader.rewind()?;
+            let mut header_buf = Vec::with_capacity(page_idx_table_start);
+            reader.read_exact(&mut header_buf)?;
+            parse_file.parse_next(&mut &header_buf[..])
+        }
+        .map_err(|err_mode| {
+            InvalidFile::from(
+                err_mode
+                    .into_inner()
+                    .expect("parser should not return incomplete"),
+            )
+        })?;
+
+        Ok(Self {
+            version,
+            info,
+            reader,
+            page_idx_table_start: page_idx_table_start as u64,
+        })
+    }
+
+    pub fn get_page_idx_entry(
+        &mut self,
+        index: [Ix; 6],
+    ) -> Result<&PageIdxEntry, Box<dyn Error>>
+    {
+        // if let Some(page_idx_entry) = self.info.page_idx_table[index].as_ref() {
+        //     return Ok(page_idx_entry);
+        // }
+
+        if self.info.page_idx_table[index].is_none() {
+            let mut flat_page_index = 0;
+            for dim in 0..6 {
+                flat_page_index *= self.info.page_idx_table.shape()[dim];
+                flat_page_index += index[dim];
+            }
+            let page_idx_entry_size = PAGE_IDX_ENTRY_SIZE + self.info.dtype_size;
+    
+            // TODO: discards buffer; seek_relative should be more efficient:
+            self.reader.seek(std::io::SeekFrom::Start(
+                self.page_idx_table_start + flat_page_index as u64 * page_idx_entry_size as u64,
+            ))?;
+            let mut buf = bytes::BytesMut::zeroed(page_idx_entry_size);
+            self.reader.read_exact(&mut buf[..])?;
+    
+            let page_idx_entry = parse_page_idx_entry(self.info.endianness, self.info.dtype_size)
+                .parse_next(&mut &buf[..])
+                .map_err(|e: ErrMode<ContextError>| {
+                    InvalidFile::from(e.into_inner().expect("not expecting incomplete input here"))
+                })?;
+    
+            self.info.page_idx_table[index] = Some(page_idx_entry);
+        }
+
+        Ok(&self.info.page_idx_table[index].as_ref().unwrap())
+    }
+}
+
 #[derive(Debug)]
-pub struct MLImage {
-    pub version: VersionHeader,
+pub struct MLImageInfo {
     pub endianness: winnow::binary::Endianness,
+    pub dtype_size: usize,
     pub tag_list: TagList,
     pub page_idx_table: PageIdxTable,
     pub uses_partial_pages: bool,
     pub world_matrix: ndarray::Array2<f64>,
 }
 
-impl MLImage {
-    pub fn read_header<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
-        let f = File::open(path)?;
-        let mut r = BufReader::with_capacity(64 * 1024, f);
-        let tag_list_size = preceded(version_header, tag_list_size_in_bytes)
-            .parse_next(&mut r.buffer())
-            .map_err(|_| IncompleteFile::default())?;
-        let minimum_read_size = VERSION_HEADER_SIZE + tag_list_size;
-        if r.capacity() >= minimum_read_size {
-            parse_file.parse_next(&mut r.buffer())
+impl MLImageInfo {
+    pub fn from_tag_list(tag_list: TagList) -> Result<Self, TagError> {
+        let endianness = if tag_list.parse_tag_value::<u8>("ML_ENDIANESS")? > 0 {
+            winnow::binary::Endianness::Big
         } else {
-            r.rewind()?;
-            let mut header_buf = Vec::with_capacity(minimum_read_size);
-            r.read_exact(&mut header_buf)?;
-            parse_file.parse_next(&mut &header_buf[..])
-        }.map_err(|err_mode| InvalidFile::from(err_mode.into_inner().expect("parser should not return incomplete")).into())
+            winnow::binary::Endianness::Little
+        };
+
+        let dtype_size: usize = tag_list.parse_tag_value("ML_IMAGE_DTYPE_SIZE").unwrap();
+
+        let image_extent: Vec<usize> = "XYZCTU"
+            .chars()
+            .filter_map(|dim| {
+                tag_list
+                    .parse_tag_value(&format!("ML_IMAGE_EXT_{}", dim))
+                    .ok()
+            })
+            .collect();
+        let page_extent: Vec<usize> = "XYZCTU"
+            .chars()
+            .filter_map(|dim| {
+                tag_list
+                    .parse_tag_value(&format!("ML_PAGE_EXT_{}", dim))
+                    .ok()
+            })
+            .collect();
+        let page_count_per_dim: Vec<usize> = image_extent
+            .iter()
+            .zip(page_extent.iter())
+            .map(|(ie, pe)| num::Integer::div_ceil(ie, pe))
+            .collect();
+        let page_count_per_dim: [usize; 6] = page_count_per_dim
+            .try_into()
+            .expect("by construction, we must have 6D extents");
+
+        let page_idx_table = ndarray::Array::from_elem(page_count_per_dim, None);
+
+        let uses_partial_pages = tag_list
+            .parse_tag_value::<i8>("ML_USES_PARTIAL_PAGES")
+            .map_or(false, |pp| pp > 0);
+
+        let mut world_matrix = ndarray::Array2::zeros((4, 4));
+        for row in 0..4 {
+            for col in 0..4 {
+                world_matrix[(row, col)] =
+                    tag_list.parse_tag_value(&format!("ML_WORLD_MATRIX_{}{}", row, col))?;
+            }
+        }
+
+        Ok(Self {
+            endianness,
+            dtype_size,
+            tag_list,
+            page_idx_table,
+            uses_partial_pages,
+            world_matrix,
+        })
     }
 }
 
 const VERSION_HEADER_SIZE: usize = "MLImageFormatVersion.".len() + 3 * 4;
+const PAGE_IDX_ENTRY_SIZE: usize = 8 + 8 + 5 + 11;
 
 pub fn version_header(input: &mut &[u8]) -> PResult<VersionHeader> {
     preceded(
@@ -238,10 +362,8 @@ where
         )
 }
 
-pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
-    let read_page_idx_table: bool = true;
-
-    let version = version_header.parse_next(input)?;
+pub fn parse_file(input: &mut &[u8]) -> PResult<MLImageInfo> {
+    let _version = version_header.parse_next(input)?;
 
     // tag_list_size includes this first tag pair, so we need to checkpoint the input:
     let tag_list_begin = input.checkpoint();
@@ -251,85 +373,12 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
     let tag_list_buffer: Vec<_> = repeat(tag_list_size, wb::u8).parse_next(input)?;
     let tag_list = TagList(tag_list.parse_next(&mut &tag_list_buffer[..])?);
 
-    let endianness = if tag_list
-        .parse_tag_value::<u8>("ML_ENDIANESS")
-        .map_err(|e| ErrMode::from_external_error(&tag_list_begin, ErrorKind::Tag, e))?
-        > 0
-    {
-        winnow::binary::Endianness::Big
-    } else {
-        winnow::binary::Endianness::Little
-    };
-
-    let dtype_size: usize = tag_list.parse_tag_value("ML_IMAGE_DTYPE_SIZE").unwrap();
-
-    let image_extent: Vec<usize> = "XYZCTU"
-        .chars()
-        .filter_map(|dim| {
-            tag_list
-                .parse_tag_value(&format!("ML_IMAGE_EXT_{}", dim))
-                .ok()
-        })
-        .collect();
-    let page_extent: Vec<usize> = "XYZCTU"
-        .chars()
-        .filter_map(|dim| {
-            tag_list
-                .parse_tag_value(&format!("ML_PAGE_EXT_{}", dim))
-                .ok()
-        })
-        .collect();
-    let page_count_per_dim: Vec<usize> = image_extent
-        .iter()
-        .zip(page_extent.iter())
-        .map(|(ie, pe)| num::Integer::div_ceil(ie, pe))
-        .collect();
-    let page_count_per_dim: [usize; 6] = page_count_per_dim
-        .try_into()
-        .map_err(|_| ErrMode::Cut(ContextError::new()))?;
-
-    let page_idx_table = if read_page_idx_table {
-        let total_page_count = page_count_per_dim.iter().product::<usize>();
-        let pages: Vec<_> = repeat(
-            total_page_count,
-            parse_page_idx_entry(endianness, dtype_size),
-        )
-        .parse_next(input)?;
-    
-        ndarray::Array::from_vec(pages)
-            .mapv(Some)
-            .into_shape(page_count_per_dim)
-            .expect("reshaping should not fail")
-    } else {
-        ndarray::Array::from_elem(page_count_per_dim, None)
-    };
-
-    let uses_partial_pages = tag_list
-        .parse_tag_value::<i8>("ML_USES_PARTIAL_PAGES")
-        .map_or(false, |pp| pp > 0);
-
-    let mut world_matrix = ndarray::Array2::zeros((4, 4));
-    for row in 0..4 {
-        for col in 0..4 {
-            world_matrix[(row, col)] = tag_list
-                .parse_tag_value(&format!("ML_WORLD_MATRIX_{}{}", row, col))
-                .map_err(|e| {
-                    ErrMode::Cut(ContextError::from_external_error(
-                        &tag_list_begin,
-                        ErrorKind::Tag,
-                        e,
-                    ))
-                })?;
-        }
-    }
-
-    Ok(MLImage {
-        version,
-        endianness,
-        tag_list,
-        page_idx_table,
-        uses_partial_pages,
-        world_matrix,
+    MLImageInfo::from_tag_list(tag_list).map_err(|e| {
+        ErrMode::Cut(ContextError::from_external_error(
+            &tag_list_begin,
+            ErrorKind::Tag,
+            e,
+        ))
     })
 }
 
@@ -412,32 +461,28 @@ mod tests {
         let asset = include_bytes!("../assets/test_32x32x8_LZ4.mlimage");
         let result = parse_file.parse_next(&mut &asset[..]);
         assert!(result.is_ok());
-        if let Some(image) = result.ok() {
-            assert_eq!(image.version.major, 0);
-            assert_eq!(image.version.minor, 1);
-        }
     }
 
     #[test]
     fn test_image_data_uncompressed() {
-        let asset = include_bytes!("../assets/test_32x32x8_None.mlimage");
-        let result = parse_file.parse_next(&mut &asset[..]);
+        let result = MLImageFormatReader::open("assets/test_32x32x8_None.mlimage");
         assert!(result.is_ok());
-        if let Some(image) = result.ok() {
-            let idx_entry = image.page_idx_table[[0, 0, 0, 0, 0, 0]].as_ref().unwrap();
-            let _raw_data = &asset[idx_entry.start_offset.try_into().unwrap()
-                ..idx_entry.end_offset.try_into().unwrap()];
+        if let Some(mut reader) = result.ok() {
+            let _idx_entry = reader.get_page_idx_entry([0, 0, 0, 0, 0, 0]).unwrap();
+            // let _raw_data = &asset[idx_entry.start_offset.try_into().unwrap()
+            //     ..idx_entry.end_offset.try_into().unwrap()];
             //let uint16_data:
         }
     }
 
     #[test]
     fn test_image_data_lz4() {
-        let asset = include_bytes!("../assets/test_32x32x8_LZ4.mlimage");
-        let result = parse_file.parse_next(&mut &asset[..]);
+        let result = MLImageFormatReader::open("assets/test_32x32x8_LZ4.mlimage");
         assert!(result.is_ok());
-        if let Some(image) = result.ok() {
-            let idx_entry = image.page_idx_table[[0, 0, 0, 0, 0, 0]].as_ref().unwrap();
+        if let Some(mut reader) = result.ok() {
+            let idx_entry = reader.get_page_idx_entry([0, 0, 0, 0, 0, 0]).unwrap();
+
+            let asset = include_bytes!("../assets/test_32x32x8_LZ4.mlimage");
 
             // 2023-09-09: I checked the start/end offsets, and they're really file offsets:
             let raw_data = &mut &asset[idx_entry.start_offset.try_into().unwrap()
@@ -445,8 +490,8 @@ mod tests {
 
             // TODO: unwrap() -> ?
             let (uncompressed_size, _flags) = ((
-                wb::i64::<&[u8], ()>(image.endianness),
-                wb::i64(image.endianness),
+                wb::i64::<&[u8], ()>(reader.info.endianness),
+                wb::i64(reader.info.endianness),
             ))
                 .parse_next(raw_data)
                 .unwrap();
