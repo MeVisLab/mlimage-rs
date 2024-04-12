@@ -20,18 +20,17 @@ pub struct VersionHeader {
     pub patch: u16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PageIdxEntry {
     pub start_offset: u64,
     pub end_offset: u64,
     pub is_compressed: bool,
     pub checksum: u32, // 24 bit
     pub flag_byte: u8,
-    // TODO: remove from PageIdxEntry? Size varies in any case.
     pub raw_voxel_value: Vec<u8>,
 }
 
-type PageIdxTable = ndarray::Array6<PageIdxEntry>;
+type PageIdxTable = ndarray::Array6<Option<PageIdxEntry>>;
 
 #[derive(Debug)]
 pub struct TagList(Vec<(String, String)>);
@@ -240,6 +239,7 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
     .parse_next(input)?;
 
     let page_idx_table = ndarray::Array::from_vec(pages)
+        .mapv(|entry| Some(entry))
         .into_shape(page_count_per_dim)
         .expect("reshaping should not fail");
 
@@ -363,7 +363,7 @@ mod tests {
         let result = parse_file.parse_next(&mut &asset[..]);
         assert!(result.is_ok());
         if let Some(image) = result.ok() {
-            let idx_entry = &image.page_idx_table[[0, 0, 0, 0, 0, 0]];
+            let idx_entry = image.page_idx_table[[0, 0, 0, 0, 0, 0]].as_ref().unwrap();
             let _raw_data = &asset[idx_entry.start_offset.try_into().unwrap()
                 ..idx_entry.end_offset.try_into().unwrap()];
             //let uint16_data:
@@ -376,7 +376,7 @@ mod tests {
         let result = parse_file.parse_next(&mut &asset[..]);
         assert!(result.is_ok());
         if let Some(image) = result.ok() {
-            let idx_entry = &image.page_idx_table[[0, 0, 0, 0, 0, 0]];
+            let idx_entry = image.page_idx_table[[0, 0, 0, 0, 0, 0]].as_ref().unwrap();
 
             // 2023-09-09: I checked the start/end offsets, and they're really file offsets:
             let raw_data = &mut &asset[idx_entry.start_offset.try_into().unwrap()
