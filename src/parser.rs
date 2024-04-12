@@ -239,6 +239,8 @@ where
 }
 
 pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
+    let read_page_idx_table: bool = true;
+
     let version = version_header.parse_next(input)?;
 
     // tag_list_size includes this first tag pair, so we need to checkpoint the input:
@@ -285,18 +287,22 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImage> {
     let page_count_per_dim: [usize; 6] = page_count_per_dim
         .try_into()
         .map_err(|_| ErrMode::Cut(ContextError::new()))?;
-    let total_page_count = page_count_per_dim.iter().product::<usize>();
 
-    let pages: Vec<_> = repeat(
-        total_page_count,
-        parse_page_idx_entry(endianness, dtype_size),
-    )
-    .parse_next(input)?;
-
-    let page_idx_table = ndarray::Array::from_vec(pages)
-        .mapv(|entry| Some(entry))
-        .into_shape(page_count_per_dim)
-        .expect("reshaping should not fail");
+    let page_idx_table = if read_page_idx_table {
+        let total_page_count = page_count_per_dim.iter().product::<usize>();
+        let pages: Vec<_> = repeat(
+            total_page_count,
+            parse_page_idx_entry(endianness, dtype_size),
+        )
+        .parse_next(input)?;
+    
+        ndarray::Array::from_vec(pages)
+            .mapv(Some)
+            .into_shape(page_count_per_dim)
+            .expect("reshaping should not fail")
+    } else {
+        ndarray::Array::from_elem(page_count_per_dim, None)
+    };
 
     let uses_partial_pages = tag_list
         .parse_tag_value::<i8>("ML_USES_PARTIAL_PAGES")
