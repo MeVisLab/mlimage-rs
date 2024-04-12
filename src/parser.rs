@@ -1,5 +1,9 @@
 use std::{
+    error::Error,
     fmt::Display,
+    fs::File,
+    io::{BufReader, Read, Seek},
+    path::Path,
     str::{from_utf8, FromStr},
 };
 
@@ -58,6 +62,36 @@ impl Display for TagError {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct IncompleteFile {}
+
+impl std::error::Error for IncompleteFile {}
+
+impl Display for IncompleteFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unexpected EOF (MLImageFormat file truncated)")
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct InvalidFile {
+    msg: String,
+}
+
+impl From<ContextError> for InvalidFile {
+    fn from(error: ContextError) -> Self {
+        Self { msg: format!("{}", error) }
+    }
+}
+
+impl std::error::Error for InvalidFile {}
+
+impl Display for InvalidFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid MLImageFormat ({})", self.msg)
+    }
+}
+
 impl TagList {
     pub fn tag_value(&self, tag_name: &str) -> Option<String> {
         self.0.iter().find_map(|(key, value)| {
@@ -93,6 +127,27 @@ pub struct MLImage {
     pub uses_partial_pages: bool,
     pub world_matrix: ndarray::Array2<f64>,
 }
+
+impl MLImage {
+    pub fn read_header<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
+        let f = File::open(path)?;
+        let mut r = BufReader::with_capacity(64 * 1024, f);
+        let tag_list_size = preceded(version_header, tag_list_size_in_bytes)
+            .parse_next(&mut r.buffer())
+            .map_err(|_| IncompleteFile::default())?;
+        let minimum_read_size = VERSION_HEADER_SIZE + tag_list_size;
+        if r.capacity() >= minimum_read_size {
+            parse_file.parse_next(&mut r.buffer())
+        } else {
+            r.rewind()?;
+            let mut header_buf = Vec::with_capacity(minimum_read_size);
+            r.read_exact(&mut header_buf)?;
+            parse_file.parse_next(&mut &header_buf[..])
+        }.map_err(|err_mode| InvalidFile::from(err_mode.into_inner().expect("parser should not return incomplete")).into())
+    }
+}
+
+const VERSION_HEADER_SIZE: usize = "MLImageFormatVersion.".len() + 3 * 4;
 
 pub fn version_header(input: &mut &[u8]) -> PResult<VersionHeader> {
     preceded(
