@@ -7,7 +7,7 @@ use std::{
     str::{from_utf8, FromStr},
 };
 
-use bytemuck::{cast_slice_mut, Pod};
+use bytemuck::{cast_slice_mut, from_bytes, Pod};
 use ndarray::Ix;
 use winnow::{
     ascii::{dec_uint, digit1, space0},
@@ -200,9 +200,10 @@ impl MLImageFormatReader {
     where
         VoxelType: Default + Pod,
     {
-        let mut result =
-            ndarray::Array6::<VoxelType>::from_elem(self.info.page_extent, VoxelType::default());
         let page_idx_entry = self.get_page_idx_entry([0, 0, 0, 0, 0, 0])?.clone();
+        let default_voxel_value: VoxelType = *from_bytes(&page_idx_entry.raw_voxel_value[..]);
+        let mut result =
+            ndarray::Array6::<VoxelType>::from_elem(self.info.page_extent, default_voxel_value);
         self.reader.seek(std::io::SeekFrom::Start(page_idx_entry.start_offset.try_into().unwrap()))?;
         let read_size = page_idx_entry.end_offset - page_idx_entry.start_offset;
         let target_voxeltype_buf = result.as_slice_mut().expect("freshly constructed array should be contiguous");
