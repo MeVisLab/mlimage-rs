@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_image_data_uncompressed() {
-        let result = MLImageFormatReader::open("assets/test_32x32x8_None.mlimage");
+        let result = MLImageFormatReader::open("../assets/test_32x32x8_None.mlimage");
         assert!(result.is_ok());
         if let Some(mut reader) = result.ok() {
             let result_page_buf = reader.read_page::<u16>([0, 0, 0, 0, 0, 0]);
@@ -181,7 +181,7 @@ mod tests {
 
     #[test]
     fn test_image_data_lz4() {
-        let result = MLImageFormatReader::open("assets/test_32x32x8_LZ4.mlimage");
+        let result = MLImageFormatReader::open("../assets/test_32x32x8_LZ4.mlimage");
         assert!(result.is_ok());
         if let Some(mut reader) = result.ok() {
             let result_page_buf = reader.read_page::<u16>([0, 0, 0, 0, 0, 0]);

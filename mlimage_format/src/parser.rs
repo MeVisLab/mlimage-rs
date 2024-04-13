@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_tag_list() {
-        let asset = include_bytes!("../assets/test_32x32x8_LZ4.mlimage");
+        let asset = include_bytes!("../../assets/test_32x32x8_LZ4.mlimage");
         let tag_list_buf = &asset[0x21..0x21 + 1211];
         let result = tag_list.parse(tag_list_buf);
         if let Err(e) = &result {
@@ -198,7 +198,7 @@ mod tests {
 
     #[test]
     fn test_file() {
-        let asset = include_bytes!("../assets/test_32x32x8_LZ4.mlimage");
+        let asset = include_bytes!("../../assets/test_32x32x8_LZ4.mlimage");
         let result = parse_info.parse_next(&mut &asset[..]);
         assert!(result.is_ok());
     }
