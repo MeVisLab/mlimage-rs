@@ -33,6 +33,10 @@ const VERSION_HEADER_SIZE: usize = "MLImageFormatVersion.".len() + 3 * 4;
 const PAGE_IDX_ENTRY_SIZE: usize = 8 + 8 + 5 + 11;
 
 impl MLImageFormatReader {
+    pub fn info(&self) -> &MLImageInfo {
+        &self.info
+    }
+
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
         let f = File::open(path)?;
         let mut reader = BufReader::with_capacity(64 * 1024, f);
