@@ -7,6 +7,7 @@ use std::{
     str::{from_utf8, FromStr},
 };
 
+use bytemuck::{cast_slice_mut, Pod};
 use ndarray::Ix;
 use winnow::{
     ascii::{dec_uint, digit1, space0},
@@ -163,11 +164,7 @@ impl MLImageFormatReader {
         })
     }
 
-    pub fn get_page_idx_entry(
-        &mut self,
-        index: [Ix; 6],
-    ) -> Result<&PageIdxEntry, Box<dyn Error>>
-    {
+    pub fn get_page_idx_entry(&mut self, index: [Ix; 6]) -> Result<&PageIdxEntry, Box<dyn Error>> {
         // if let Some(page_idx_entry) = self.info.page_idx_table[index].as_ref() {
         //     return Ok(page_idx_entry);
         // }
@@ -179,24 +176,40 @@ impl MLImageFormatReader {
                 flat_page_index += index[dim];
             }
             let page_idx_entry_size = PAGE_IDX_ENTRY_SIZE + self.info.dtype_size;
-    
+
             // TODO: discards buffer; seek_relative should be more efficient:
             self.reader.seek(std::io::SeekFrom::Start(
                 self.page_idx_table_start + flat_page_index as u64 * page_idx_entry_size as u64,
             ))?;
             let mut buf = bytes::BytesMut::zeroed(page_idx_entry_size);
             self.reader.read_exact(&mut buf[..])?;
-    
+
             let page_idx_entry = parse_page_idx_entry(self.info.endianness, self.info.dtype_size)
                 .parse_next(&mut &buf[..])
                 .map_err(|e: ErrMode<ContextError>| {
                     InvalidFile::from(e.into_inner().expect("not expecting incomplete input here"))
                 })?;
-    
+
             self.info.page_idx_table[index] = Some(page_idx_entry);
         }
 
         Ok(&self.info.page_idx_table[index].as_ref().unwrap())
+    }
+
+    pub fn read_page<VoxelType>(&mut self, index: [Ix; 6]) -> Result<ndarray::Array6<VoxelType>, Box<dyn Error>>
+    where
+        VoxelType: Default + Pod,
+    {
+        let mut result =
+            ndarray::Array6::<VoxelType>::from_elem(self.info.page_extent, VoxelType::default());
+        let page_idx_entry = self.get_page_idx_entry([0, 0, 0, 0, 0, 0])?.clone();
+        self.reader.seek(std::io::SeekFrom::Start(page_idx_entry.start_offset.try_into().unwrap()))?;
+        let read_size = page_idx_entry.end_offset - page_idx_entry.start_offset;
+        let target_voxeltype_buf = result.as_slice_mut().expect("freshly constructed array should be contiguous");
+        let target_u8_buf: &mut [u8] = cast_slice_mut(target_voxeltype_buf);
+        assert!(target_u8_buf.len() == read_size.try_into().unwrap());
+        self.reader.read_exact(target_u8_buf)?;
+        Ok(result)
     }
 }
 
@@ -204,6 +217,8 @@ impl MLImageFormatReader {
 pub struct MLImageInfo {
     pub endianness: winnow::binary::Endianness,
     pub dtype_size: usize,
+    pub image_extent: [Ix; 6],
+    pub page_extent: [Ix; 6],
     pub tag_list: TagList,
     pub page_idx_table: PageIdxTable,
     pub uses_partial_pages: bool,
@@ -220,7 +235,7 @@ impl MLImageInfo {
 
         let dtype_size: usize = tag_list.parse_tag_value("ML_IMAGE_DTYPE_SIZE").unwrap();
 
-        let image_extent: Vec<usize> = "XYZCTU"
+        let image_extent: Vec<Ix> = "XYZCTU"
             .chars()
             .filter_map(|dim| {
                 tag_list
@@ -228,6 +243,10 @@ impl MLImageInfo {
                     .ok()
             })
             .collect();
+        let image_extent: [Ix; 6] = image_extent
+            .try_into()
+            .expect("by construction, we must have 6D extents");
+
         let page_extent: Vec<usize> = "XYZCTU"
             .chars()
             .filter_map(|dim| {
@@ -236,6 +255,10 @@ impl MLImageInfo {
                     .ok()
             })
             .collect();
+        let page_extent: [Ix; 6] = page_extent
+            .try_into()
+            .expect("by construction, we must have 6D extents");
+
         let page_count_per_dim: Vec<usize> = image_extent
             .iter()
             .zip(page_extent.iter())
@@ -262,6 +285,8 @@ impl MLImageInfo {
         Ok(Self {
             endianness,
             dtype_size,
+            image_extent,
+            page_extent,
             tag_list,
             page_idx_table,
             uses_partial_pages,
@@ -468,10 +493,8 @@ mod tests {
         let result = MLImageFormatReader::open("assets/test_32x32x8_None.mlimage");
         assert!(result.is_ok());
         if let Some(mut reader) = result.ok() {
-            let _idx_entry = reader.get_page_idx_entry([0, 0, 0, 0, 0, 0]).unwrap();
-            // let _raw_data = &asset[idx_entry.start_offset.try_into().unwrap()
-            //     ..idx_entry.end_offset.try_into().unwrap()];
-            //let uint16_data:
+            let result_page_buf = reader.read_page::<u16>([0, 0, 0, 0, 0, 0]);
+            assert!(result_page_buf.is_ok());
         }
     }
 
