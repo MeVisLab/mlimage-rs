@@ -208,8 +208,17 @@ impl MLImageFormatReader {
         let read_size = page_idx_entry.end_offset - page_idx_entry.start_offset;
         let target_voxeltype_buf = result.as_slice_mut().expect("freshly constructed array should be contiguous");
         let target_u8_buf: &mut [u8] = cast_slice_mut(target_voxeltype_buf);
-        assert!(target_u8_buf.len() == read_size.try_into().unwrap());
-        self.reader.read_exact(target_u8_buf)?;
+        let compressor_name = self.info.tag_list.tag_value("ML_COMPRESSOR_NAME").unwrap_or(String::default());
+        match &compressor_name[..] {
+            "" => {
+                assert!(target_u8_buf.len() == read_size.try_into().unwrap());
+                self.reader.read_exact(target_u8_buf)?;
+            },
+            _ => {
+                todo!("compressor '{}' not implemented yet", &compressor_name);
+            }
+        }
+        
         Ok(result)
     }
 }
