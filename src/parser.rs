@@ -4,7 +4,7 @@ use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Seek},
     path::Path,
-    str::{from_utf8, FromStr},
+    str::from_utf8,
 };
 
 use bytemuck::{cast_slice_mut, from_bytes, Pod};
@@ -19,6 +19,8 @@ use winnow::{
     token::take_until,
     PResult, Parser,
 };
+
+use crate::tag_list::{TagError, TagList};
 
 #[derive(Debug)]
 pub struct VersionHeader {
@@ -38,32 +40,6 @@ pub struct PageIdxEntry {
 }
 
 type PageIdxTable = ndarray::Array6<Option<PageIdxEntry>>;
-
-#[derive(Debug)]
-pub struct TagList(Vec<(String, String)>);
-
-#[derive(Debug, Clone)]
-pub struct TagError {
-    pub tag_name: String,
-    /// None means that the tag was missing, otherwise it could not be parsed
-    pub tag_value: Option<String>,
-}
-
-impl std::error::Error for TagError {}
-
-impl Display for TagError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(value) = &self.tag_value {
-            write!(
-                f,
-                "could not parse tag '{}' with value '{}'",
-                self.tag_name, value
-            )
-        } else {
-            write!(f, "tag '{}' not found", self.tag_name)
-        }
-    }
-}
 
 #[derive(Debug, Default)]
 pub struct IncompleteFile {}
@@ -94,32 +70,6 @@ impl std::error::Error for InvalidFile {}
 impl Display for InvalidFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "invalid MLImageFormat ({})", self.msg)
-    }
-}
-
-impl TagList {
-    pub fn tag_value(&self, tag_name: &str) -> Option<String> {
-        self.0.iter().find_map(|(key, value)| {
-            if key == tag_name {
-                Some(value.clone())
-            } else {
-                None
-            }
-        })
-    }
-
-    pub fn parse_tag_value<F: FromStr>(&self, tag_name: &str) -> Result<F, TagError> {
-        if let Some(value) = self.tag_value(tag_name) {
-            value.parse().or(Err(TagError {
-                tag_name: tag_name.to_owned(),
-                tag_value: Some(value),
-            }))
-        } else {
-            Err(TagError {
-                tag_name: tag_name.to_owned(),
-                tag_value: None,
-            })
-        }
     }
 }
 
@@ -166,10 +116,6 @@ impl MLImageFormatReader {
     }
 
     pub fn get_page_idx_entry(&mut self, index: [Ix; 6]) -> Result<&PageIdxEntry, Box<dyn Error>> {
-        // if let Some(page_idx_entry) = self.info.page_idx_table[index].as_ref() {
-        //     return Ok(page_idx_entry);
-        // }
-
         if self.info.page_idx_table[index].is_none() {
             let mut flat_page_index = 0;
             for dim in 0..6 {
@@ -450,7 +396,7 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImageInfo> {
     input.reset(&tag_list_begin);
 
     let tag_list_buffer: Vec<_> = repeat(tag_list_size, wb::u8).parse_next(input)?;
-    let tag_list = TagList(tag_list.parse_next(&mut &tag_list_buffer[..])?);
+    let tag_list = TagList::new(tag_list.parse_next(&mut &tag_list_buffer[..])?);
 
     MLImageInfo::from_tag_list(tag_list).map_err(|e| {
         ErrMode::Cut(ContextError::from_external_error(
@@ -463,8 +409,6 @@ pub fn parse_file(input: &mut &[u8]) -> PResult<MLImageInfo> {
 
 #[cfg(test)]
 mod tests {
-    use lz4_flex::decompress;
-
     use super::*;
 
     #[test]
@@ -500,7 +444,6 @@ mod tests {
     #[test]
     fn test_tag_list_size_in_bytes() {
         let result = tag_list_size_in_bytes.parse(b"ML_TAG_LIST_SIZE_IN_BYTES\01115           \0");
-        dbg!(&result);
         assert!(result.is_ok());
         if let Some(size) = result.ok() {
             assert_eq!(size, 1115);
@@ -509,14 +452,14 @@ mod tests {
 
     #[test]
     fn test_reading_missing_tag() {
-        let tag_list = TagList(vec![("SOME_TAG".to_string(), "existing_value".to_string())]);
+        let tag_list = TagList::new(vec![("SOME_TAG".to_string(), "existing_value".to_string())]);
         assert!(tag_list.tag_value("MISSING_TAG").is_none());
         assert!(tag_list.parse_tag_value::<usize>("MISSING_TAG").is_err());
     }
 
     #[test]
     fn test_reading_int_tag() {
-        let tag_list = TagList(vec![("SOME_TAG".to_string(), "123".to_string())]);
+        let tag_list = TagList::new(vec![("SOME_TAG".to_string(), "123".to_string())]);
         assert!(tag_list.tag_value("SOME_TAG").is_some());
         assert_eq!(tag_list.tag_value("SOME_TAG").unwrap(), "123");
         assert!(tag_list.parse_tag_value::<usize>("SOME_TAG").is_ok());
