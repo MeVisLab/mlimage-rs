@@ -8,6 +8,7 @@ use std::{
 };
 
 use bytemuck::{cast_slice_mut, from_bytes, Pod};
+use lz4_flex::decompress_into;
 use ndarray::Ix;
 use winnow::{
     ascii::{dec_uint, digit1, space0},
@@ -196,7 +197,10 @@ impl MLImageFormatReader {
         Ok(&self.info.page_idx_table[index].as_ref().unwrap())
     }
 
-    pub fn read_page<VoxelType>(&mut self, index: [Ix; 6]) -> Result<ndarray::Array6<VoxelType>, Box<dyn Error>>
+    pub fn read_page<VoxelType>(
+        &mut self,
+        index: [Ix; 6],
+    ) -> Result<ndarray::Array6<VoxelType>, Box<dyn Error>>
     where
         VoxelType: Default + Pod,
     {
@@ -204,21 +208,61 @@ impl MLImageFormatReader {
         let default_voxel_value: VoxelType = *from_bytes(&page_idx_entry.raw_voxel_value[..]);
         let mut result =
             ndarray::Array6::<VoxelType>::from_elem(self.info.page_extent, default_voxel_value);
-        self.reader.seek(std::io::SeekFrom::Start(page_idx_entry.start_offset.try_into().unwrap()))?;
+        self.reader.seek(std::io::SeekFrom::Start(
+            page_idx_entry.start_offset.try_into().unwrap(),
+        ))?;
         let read_size = page_idx_entry.end_offset - page_idx_entry.start_offset;
-        let target_voxeltype_buf = result.as_slice_mut().expect("freshly constructed array should be contiguous");
+        let target_voxeltype_buf = result
+            .as_slice_mut()
+            .expect("freshly constructed array should be contiguous");
         let target_u8_buf: &mut [u8] = cast_slice_mut(target_voxeltype_buf);
-        let compressor_name = self.info.tag_list.tag_value("ML_COMPRESSOR_NAME").unwrap_or(String::default());
+        let compressor_name = self
+            .info
+            .tag_list
+            .tag_value("ML_COMPRESSOR_NAME")
+            .unwrap_or(String::default());
         match &compressor_name[..] {
             "" => {
                 assert!(target_u8_buf.len() == read_size.try_into().unwrap());
                 self.reader.read_exact(target_u8_buf)?;
-            },
+            }
+            "LZ4" => {
+                // 2023-09-09: I checked the start/end offsets, and they're really file offsets:
+                let mut buf = bytes::BytesMut::zeroed(
+                    read_size
+                        .try_into()
+                        .expect("raw page size should fit into usize"),
+                );
+                self.reader.read_exact(&mut buf[..])?;
+
+                // TODO: unwrap() -> ?
+                let (uncompressed_size, flags) = ((
+                    wb::i64::<&[u8], ()>(wb::Endianness::Little),
+                    wb::i64(wb::Endianness::Little),
+                ))
+                    .parse_next(&mut &buf[..])
+                    .unwrap();
+                let uncompressed_size = usize::try_from(uncompressed_size)
+                    .expect("uncompressed page size should fit into usize");
+
+                let byte_plane_reordering = (flags & 1) > 0;
+                let diff_code_data = (flags & 2) > 0;
+
+                assert!(target_u8_buf.len() == uncompressed_size);
+
+                // TODO: what's the meaning of the return code? its a usize that
+                // is smaller than uncompressed_size, but larger than read_size
+                // (and not exactly the difference)
+                let _decompressed =
+                    decompress_into(&buf[..], target_u8_buf).expect("decompression failed");
+
+                dbg!(byte_plane_reordering, diff_code_data);
+            }
             _ => {
                 todo!("compressor '{}' not implemented yet", &compressor_name);
             }
         }
-        
+
         Ok(result)
     }
 }
@@ -513,28 +557,8 @@ mod tests {
         let result = MLImageFormatReader::open("assets/test_32x32x8_LZ4.mlimage");
         assert!(result.is_ok());
         if let Some(mut reader) = result.ok() {
-            let idx_entry = reader.get_page_idx_entry([0, 0, 0, 0, 0, 0]).unwrap();
-
-            let asset = include_bytes!("../assets/test_32x32x8_LZ4.mlimage");
-
-            // 2023-09-09: I checked the start/end offsets, and they're really file offsets:
-            let raw_data = &mut &asset[idx_entry.start_offset.try_into().unwrap()
-                ..idx_entry.end_offset.try_into().unwrap()];
-
-            // TODO: unwrap() -> ?
-            let (uncompressed_size, _flags) = ((
-                wb::i64::<&[u8], ()>(reader.info.endianness),
-                wb::i64(reader.info.endianness),
-            ))
-                .parse_next(raw_data)
-                .unwrap();
-
-            let decompressed = decompress(raw_data, usize::try_from(uncompressed_size).unwrap())
-                .expect("decompression failed");
-            //let mut decomp = lz4_flex::frame::FrameDecoder::new(raw_data);
-            //let mut decompressed: Vec<u8> = Vec::new();
-            //std::io::copy(&mut decomp, &mut decompressed).expect("decompression failed");
-            dbg!(decompressed);
+            let result_page_buf = reader.read_page::<u16>([0, 0, 0, 0, 0, 0]);
+            assert!(result_page_buf.is_ok());
         }
     }
 }
