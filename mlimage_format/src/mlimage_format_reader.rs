@@ -67,8 +67,9 @@ impl MLImageFormatReader {
         let info = if reader.capacity() >= page_idx_table_start {
             parse_info.parse_next(&mut reader.buffer())
         } else {
+            // TODO: re-use buffer already read above; only read rest?
             reader.rewind()?;
-            let mut header_buf = Vec::with_capacity(page_idx_table_start);
+            let mut header_buf = bytes::BytesMut::zeroed(page_idx_table_start);
             reader.read_exact(&mut header_buf)?;
             parse_info.parse_next(&mut &header_buf[..])
         }
