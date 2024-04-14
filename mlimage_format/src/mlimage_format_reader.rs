@@ -175,7 +175,7 @@ impl MLImageFormatReader {
                 // TODO: what's the meaning of the return code? its a usize that
                 // is smaller than uncompressed_size, but larger than read_size
                 // (and not exactly the difference)
-                let _decompressed = lz4_flex::decompress_into(&buf[..], target_u8_buf)
+                let _decompressed = lz4_flex::decompress_into(&buf[16..], target_u8_buf)
                     .expect("decompression failed");
 
                 dbg!(byte_plane_reordering, diff_code_data);
