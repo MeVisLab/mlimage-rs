@@ -5,8 +5,8 @@ use std::{
     path::Path,
 };
 
-use bytemuck::{cast_slice_mut, from_bytes, Pod};
-use ndarray::Ix;
+use bytemuck::{cast_slice, cast_slice_mut, from_bytes, Pod};
+use ndarray::{ArrayView, Ix};
 use winnow::{
     binary as wb,
     error::{ContextError, ErrMode},
@@ -193,6 +193,10 @@ impl MLImageFormatReader {
                     let _decompressed = lz4_flex::decompress_into(&buf[16..], target_u8_buf)
                         .expect("decompression failed");
 
+                    if byte_plane_reordering && self.info.dtype_size > 1 {
+                        Self::unreorder_byte_planes(&mut result, self.info.dtype_size);
+                    }
+
                     //dbg!(byte_plane_reordering, diff_code_data);
                 }
                 _ => {
@@ -202,6 +206,36 @@ impl MLImageFormatReader {
         }
 
         Ok(result)
+    }
+
+    pub fn unreorder_byte_planes<VoxelType>(
+        array: &mut ndarray::Array6<VoxelType>,
+        dtype_size: usize,
+    ) where
+        VoxelType: Default + Pod,
+    {
+        let voxeltype_buf = array
+            .as_slice()
+            .expect("freshly constructed array should be contiguous");
+        let u8_buf: &[u8] = cast_slice(voxeltype_buf);
+
+        let mut result =
+            ndarray::Array6::<VoxelType>::from_elem(array.raw_dim(), VoxelType::default());
+        let target_voxeltype_buf = result
+            .as_slice_mut()
+            .expect("freshly constructed array should be contiguous");
+        let target_u8_buf: &mut [u8] = cast_slice_mut(target_voxeltype_buf);
+
+        let mut reordered_shape: [Ix; 2] = [0; 2];
+        reordered_shape[0] = dtype_size;
+        reordered_shape[1] = array.shape().iter().product();
+        let reordered_view = ArrayView::from_shape(reordered_shape, u8_buf)
+            .expect("carefully crafted shape should fit");
+        for (src, dest) in reordered_view.t().iter().zip(target_u8_buf.iter_mut()) {
+            *dest = *src;
+        }
+
+        drop(std::mem::replace(array, result));
     }
 }
 
