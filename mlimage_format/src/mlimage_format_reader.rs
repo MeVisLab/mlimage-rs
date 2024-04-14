@@ -128,8 +128,20 @@ impl MLImageFormatReader {
     {
         let page_idx_entry = self.get_page_idx_entry(index)?.clone();
         let default_voxel_value: VoxelType = *from_bytes(&page_idx_entry.raw_voxel_value[..]);
+
+        let mut page_extent_c = self.info.page_extent_c();
+        if self.info.uses_partial_pages {
+            let image_extent_c = self.info.image_extent_c();
+            for dim in 0..6 {
+                let start_pos = index[5-dim] * page_extent_c[dim];
+                if image_extent_c[dim] < start_pos + page_extent_c[dim] {
+                    page_extent_c[dim] = image_extent_c[dim] - start_pos;
+                }
+            }
+        }
+
         let mut result =
-            ndarray::Array6::<VoxelType>::from_elem(self.info.page_extent_c(), default_voxel_value);
+            ndarray::Array6::<VoxelType>::from_elem(page_extent_c, default_voxel_value);
         self.reader.seek(std::io::SeekFrom::Start(
             page_idx_entry.start_offset.try_into().unwrap(),
         ))?;
