@@ -27,6 +27,18 @@ pub struct MLImageInfo {
 }
 
 impl MLImageInfo {
+    pub fn image_extent_numpy(&self) -> [Ix; 6] {
+        let mut result = self.image_extent.clone();
+        result.reverse();
+        result
+    }
+
+    pub fn page_extent_numpy(&self) -> [Ix; 6] {
+        let mut result = self.page_extent.clone();
+        result.reverse();
+        result
+    }
+
     pub fn from_tag_list(tag_list: TagList) -> Result<Self, TagError> {
         let endianness = if tag_list.parse_tag_value::<u8>("ML_ENDIANESS")? > 0 {
             winnow::binary::Endianness::Big
