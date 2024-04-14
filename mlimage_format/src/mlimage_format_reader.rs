@@ -106,7 +106,7 @@ impl MLImageFormatReader {
     where
         VoxelType: Default + Pod,
     {
-        let page_idx_entry = self.get_page_idx_entry([0, 0, 0, 0, 0, 0])?.clone();
+        let page_idx_entry = self.get_page_idx_entry(index)?.clone();
         let default_voxel_value: VoxelType = *from_bytes(&page_idx_entry.raw_voxel_value[..]);
         let mut result =
             ndarray::Array6::<VoxelType>::from_elem(self.info.page_extent, default_voxel_value);
