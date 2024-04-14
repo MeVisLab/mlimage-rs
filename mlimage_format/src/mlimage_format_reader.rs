@@ -224,4 +224,24 @@ mod tests {
             assert!(result_page_buf.is_ok());
         }
     }
+
+    #[test]
+    fn test_reading_partial_pages() {
+        let result = MLImageFormatReader::open("../assets/test_32x32x8_partial_pages.mlimage");
+        assert!(result.is_ok());
+        if let Some(mut reader) = result.ok() {
+            let result_page_buf = reader.read_page::<u16>([1, 1, 2, 0, 0, 0]);
+            assert!(result_page_buf.is_ok());
+        }
+    }
+
+    #[test]
+    fn test_reading_constant_pages() {
+        let result = MLImageFormatReader::open("../assets/test_32x32x8_constant_pages.mlimage");
+        assert!(result.is_ok());
+        if let Some(mut reader) = result.ok() {
+            let result_page_buf = reader.read_page::<u16>([0, 1, 0, 0, 0, 0]);
+            assert!(result_page_buf.is_ok());
+        }
+    }
 }
