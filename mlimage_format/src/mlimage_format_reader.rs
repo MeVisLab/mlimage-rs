@@ -133,7 +133,7 @@ impl MLImageFormatReader {
         if self.info.uses_partial_pages {
             let image_extent_c = self.info.image_extent_c();
             for dim in 0..6 {
-                let start_pos = index[5-dim] * page_extent_c[dim];
+                let start_pos = index[5 - dim] * page_extent_c[dim];
                 if image_extent_c[dim] < start_pos + page_extent_c[dim] {
                     page_extent_c[dim] = image_extent_c[dim] - start_pos;
                 }
@@ -142,58 +142,62 @@ impl MLImageFormatReader {
 
         let mut result =
             ndarray::Array6::<VoxelType>::from_elem(page_extent_c, default_voxel_value);
-        self.reader.seek(std::io::SeekFrom::Start(
-            page_idx_entry.start_offset.try_into().unwrap(),
-        ))?;
-        let read_size = page_idx_entry.end_offset - page_idx_entry.start_offset;
-        let target_voxeltype_buf = result
-            .as_slice_mut()
-            .expect("freshly constructed array should be contiguous");
-        let target_u8_buf: &mut [u8] = cast_slice_mut(target_voxeltype_buf);
-        let compressor_name = self
-            .info
-            .tag_list
-            .tag_value("ML_COMPRESSOR_NAME")
-            .unwrap_or(String::default());
-        match &compressor_name[..] {
-            "" => {
-                assert!(target_u8_buf.len() == read_size.try_into().unwrap());
-                self.reader.read_exact(target_u8_buf)?;
-            }
-            "LZ4" => {
-                // 2023-09-09: I checked the start/end offsets, and they're really file offsets:
-                let mut buf = bytes::BytesMut::zeroed(
-                    read_size
-                        .try_into()
-                        .expect("raw page size should fit into usize"),
-                );
-                self.reader.read_exact(&mut buf[..])?;
 
-                // TODO: unwrap() -> ?
-                let (uncompressed_size, flags) = ((
-                    wb::i64::<&[u8], ()>(wb::Endianness::Little),
-                    wb::i64(wb::Endianness::Little),
-                ))
-                    .parse_next(&mut &buf[..])
-                    .unwrap();
-                let uncompressed_size = usize::try_from(uncompressed_size)
-                    .expect("uncompressed page size should fit into usize");
+        // constant pages are stored in an optimized way
+        if page_idx_entry.start_offset < page_idx_entry.end_offset {
+            self.reader.seek(std::io::SeekFrom::Start(
+                page_idx_entry.start_offset.try_into().unwrap(),
+            ))?;
+            let read_size = page_idx_entry.end_offset - page_idx_entry.start_offset;
+            let target_voxeltype_buf = result
+                .as_slice_mut()
+                .expect("freshly constructed array should be contiguous");
+            let target_u8_buf: &mut [u8] = cast_slice_mut(target_voxeltype_buf);
+            let compressor_name = self
+                .info
+                .tag_list
+                .tag_value("ML_COMPRESSOR_NAME")
+                .unwrap_or(String::default());
+            match &compressor_name[..] {
+                "" => {
+                    assert!(target_u8_buf.len() == read_size.try_into().unwrap());
+                    self.reader.read_exact(target_u8_buf)?;
+                }
+                "LZ4" => {
+                    // 2023-09-09: I checked the start/end offsets, and they're really file offsets:
+                    let mut buf = bytes::BytesMut::zeroed(
+                        read_size
+                            .try_into()
+                            .expect("raw page size should fit into usize"),
+                    );
+                    self.reader.read_exact(&mut buf[..])?;
 
-                let byte_plane_reordering = (flags & 1) > 0;
-                let diff_code_data = (flags & 2) > 0;
+                    // TODO: unwrap() -> ?
+                    let (uncompressed_size, flags) = ((
+                        wb::i64::<&[u8], ()>(wb::Endianness::Little),
+                        wb::i64(wb::Endianness::Little),
+                    ))
+                        .parse_next(&mut &buf[..])
+                        .unwrap();
+                    let uncompressed_size = usize::try_from(uncompressed_size)
+                        .expect("uncompressed page size should fit into usize");
 
-                assert!(target_u8_buf.len() == uncompressed_size);
+                    let byte_plane_reordering = (flags & 1) > 0;
+                    let diff_code_data = (flags & 2) > 0;
 
-                // TODO: what's the meaning of the return code? its a usize that
-                // is smaller than uncompressed_size, but larger than read_size
-                // (and not exactly the difference)
-                let _decompressed = lz4_flex::decompress_into(&buf[16..], target_u8_buf)
-                    .expect("decompression failed");
+                    assert!(target_u8_buf.len() == uncompressed_size);
 
-                dbg!(byte_plane_reordering, diff_code_data);
-            }
-            _ => {
-                todo!("compressor '{}' not implemented yet", &compressor_name);
+                    // TODO: what's the meaning of the return code? its a usize that
+                    // is smaller than uncompressed_size, but larger than read_size
+                    // (and not exactly the difference)
+                    let _decompressed = lz4_flex::decompress_into(&buf[16..], target_u8_buf)
+                        .expect("decompression failed");
+
+                    //dbg!(byte_plane_reordering, diff_code_data);
+                }
+                _ => {
+                    todo!("compressor '{}' not implemented yet", &compressor_name);
+                }
             }
         }
 
