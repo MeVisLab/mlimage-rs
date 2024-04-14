@@ -2,18 +2,6 @@ use ndarray::Ix;
 
 use crate::tag_list::{TagError, TagList};
 
-#[derive(Debug, Clone)]
-pub struct PageIdxEntry {
-    pub start_offset: u64,
-    pub end_offset: u64,
-    pub is_compressed: bool,
-    pub checksum: u32, // 24 bit
-    pub flag_byte: u8,
-    pub raw_voxel_value: Vec<u8>,
-}
-
-type PageIdxTable = ndarray::Array6<Option<PageIdxEntry>>;
-
 #[derive(Debug)]
 pub struct MLImageInfo {
     pub endianness: winnow::binary::Endianness,
@@ -21,22 +9,48 @@ pub struct MLImageInfo {
     pub image_extent: [Ix; 6],
     pub page_extent: [Ix; 6],
     pub tag_list: TagList,
-    pub page_idx_table: PageIdxTable,
     pub uses_partial_pages: bool,
     pub world_matrix: ndarray::Array2<f64>,
 }
 
 impl MLImageInfo {
-    pub fn image_extent_numpy(&self) -> [Ix; 6] {
+    /// Image extent in (x, y, z, c, t, u) order (logical order, first index
+    /// being the fastest changing one, aka "Fortran order")
+    pub fn image_extent(&self) -> [Ix; 6] {
+        self.image_extent
+    }
+
+    /// Image extent in (u, c, t, z, y, x) order ("C order", memory order, with
+    /// the last index being the fastest changing one)
+    pub fn image_extent_c(&self) -> [Ix; 6] {
         let mut result = self.image_extent.clone();
         result.reverse();
         result
     }
 
-    pub fn page_extent_numpy(&self) -> [Ix; 6] {
+    /// Page extent in (x, y, z, c, t, u) order (logical order, first index
+    /// being the fastest changing one, aka "Fortran order")
+    pub fn page_extent(&self) -> [Ix; 6] {
+        self.image_extent
+    }
+
+    /// Page extent in (u, c, t, z, y, x) order ("C order", memory order, with
+    /// the last index being the fastest changing one)
+    pub fn page_extent_c(&self) -> [Ix; 6] {
         let mut result = self.page_extent.clone();
         result.reverse();
         result
+    }
+
+    pub fn page_count_per_dim(&self) -> [usize; 6] {
+        let page_count_per_dim: Vec<usize> = self.image_extent
+            .iter()
+            .zip(self.page_extent.iter())
+            .map(|(ie, pe)| num::Integer::div_ceil(ie, pe))
+            .collect();
+        page_count_per_dim
+            .try_into()
+            .expect("by construction, we must have 6D extents")
     }
 
     pub fn from_tag_list(tag_list: TagList) -> Result<Self, TagError> {
@@ -72,17 +86,6 @@ impl MLImageInfo {
             .try_into()
             .expect("by construction, we must have 6D extents");
 
-        let page_count_per_dim: Vec<usize> = image_extent
-            .iter()
-            .zip(page_extent.iter())
-            .map(|(ie, pe)| num::Integer::div_ceil(ie, pe))
-            .collect();
-        let page_count_per_dim: [usize; 6] = page_count_per_dim
-            .try_into()
-            .expect("by construction, we must have 6D extents");
-
-        let page_idx_table = ndarray::Array::from_elem(page_count_per_dim, None);
-
         let uses_partial_pages = tag_list
             .parse_tag_value::<i8>("ML_USES_PARTIAL_PAGES")
             .map_or(false, |pp| pp > 0);
@@ -101,7 +104,6 @@ impl MLImageInfo {
             image_extent,
             page_extent,
             tag_list,
-            page_idx_table,
             uses_partial_pages,
             world_matrix,
         })

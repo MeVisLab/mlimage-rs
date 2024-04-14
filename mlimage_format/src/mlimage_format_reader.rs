@@ -1,17 +1,21 @@
 use std::{
     error::Error,
     fs::File,
-    io::{BufRead, BufReader, Seek, Read},
+    io::{BufRead, BufReader, Read, Seek},
     path::Path,
 };
 
 use bytemuck::{cast_slice_mut, from_bytes, Pod};
 use ndarray::Ix;
-use winnow::{error::{ContextError, ErrMode}, Parser, binary as wb};
+use winnow::{
+    binary as wb,
+    error::{ContextError, ErrMode},
+    Parser,
+};
 
 use crate::{
     errors::{IncompleteFile, InvalidFile},
-    mlimage_info::{MLImageInfo, PageIdxEntry},
+    mlimage_info::MLImageInfo,
     parser::{parse_info, parse_page_idx_entry, tag_list_size_in_bytes, version_header},
 };
 
@@ -27,7 +31,20 @@ pub struct MLImageFormatReader {
     info: MLImageInfo,
     reader: BufReader<File>,
     page_idx_table_start: u64,
+    pub page_idx_table: PageIdxTable,
 }
+
+#[derive(Debug, Clone)]
+pub struct PageIdxEntry {
+    pub start_offset: u64,
+    pub end_offset: u64,
+    pub is_compressed: bool,
+    pub checksum: u32, // 24 bit
+    pub flag_byte: u8,
+    pub raw_voxel_value: Vec<u8>,
+}
+
+type PageIdxTable = ndarray::Array6<Option<PageIdxEntry>>;
 
 const VERSION_HEADER_SIZE: usize = "MLImageFormatVersion.".len() + 3 * 4;
 const PAGE_IDX_ENTRY_SIZE: usize = 8 + 8 + 5 + 11;
@@ -63,20 +80,23 @@ impl MLImageFormatReader {
             )
         })?;
 
+        let page_idx_table = ndarray::Array::from_elem(info.page_count_per_dim(), None);
+
         Ok(Self {
             version,
             info,
             reader,
             page_idx_table_start: page_idx_table_start as u64,
+            page_idx_table,
         })
     }
 
     pub fn get_page_idx_entry(&mut self, index: [Ix; 6]) -> Result<&PageIdxEntry, Box<dyn Error>> {
-        if self.info.page_idx_table[index].is_none() {
+        if self.page_idx_table[index].is_none() {
             let mut flat_page_index = 0;
             for dim in 0..6 {
-                flat_page_index *= self.info.page_idx_table.shape()[5-dim];
-                flat_page_index += index[5-dim];
+                flat_page_index *= self.page_idx_table.shape()[5 - dim];
+                flat_page_index += index[5 - dim];
             }
             let page_idx_entry_size = PAGE_IDX_ENTRY_SIZE + self.info.dtype_size;
 
@@ -93,10 +113,10 @@ impl MLImageFormatReader {
                     InvalidFile::from(e.into_inner().expect("not expecting incomplete input here"))
                 })?;
 
-            self.info.page_idx_table[index] = Some(page_idx_entry);
+            self.page_idx_table[index] = Some(page_idx_entry);
         }
 
-        Ok(&self.info.page_idx_table[index].as_ref().unwrap())
+        Ok(&self.page_idx_table[index].as_ref().unwrap())
     }
 
     pub fn read_page<VoxelType>(
@@ -109,7 +129,7 @@ impl MLImageFormatReader {
         let page_idx_entry = self.get_page_idx_entry(index)?.clone();
         let default_voxel_value: VoxelType = *from_bytes(&page_idx_entry.raw_voxel_value[..]);
         let mut result =
-            ndarray::Array6::<VoxelType>::from_elem(self.info.page_extent_numpy(), default_voxel_value);
+            ndarray::Array6::<VoxelType>::from_elem(self.info.page_extent_c(), default_voxel_value);
         self.reader.seek(std::io::SeekFrom::Start(
             page_idx_entry.start_offset.try_into().unwrap(),
         ))?;
@@ -155,8 +175,8 @@ impl MLImageFormatReader {
                 // TODO: what's the meaning of the return code? its a usize that
                 // is smaller than uncompressed_size, but larger than read_size
                 // (and not exactly the difference)
-                let _decompressed =
-                    lz4_flex::decompress_into(&buf[..], target_u8_buf).expect("decompression failed");
+                let _decompressed = lz4_flex::decompress_into(&buf[..], target_u8_buf)
+                    .expect("decompression failed");
 
                 dbg!(byte_plane_reordering, diff_code_data);
             }

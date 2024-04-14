@@ -10,11 +10,7 @@ use winnow::{
     PResult, Parser,
 };
 
-use crate::{
-    mlimage_format_reader::VersionHeader,
-    mlimage_info::{MLImageInfo, PageIdxEntry},
-    tag_list::TagList,
-};
+use crate::{mlimage_format_reader::{PageIdxEntry, VersionHeader}, mlimage_info::MLImageInfo, tag_list::TagList};
 
 pub fn version_header(input: &mut &[u8]) -> PResult<VersionHeader> {
     preceded(
