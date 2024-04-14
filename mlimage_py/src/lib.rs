@@ -1,5 +1,5 @@
 use mlimage_rs::mlimage_format_reader::MLImageFormatReader;
-use numpy::{ndarray::Ix, IntoPyArray, PyArray2};
+use numpy::{ndarray::Ix, IntoPyArray, PyArray2, PyArray6};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 
 #[pyclass(name = "MLImageFormatReader")]
@@ -17,6 +17,13 @@ impl PyMLImageFormatReader {
         }
     }
 
+    pub fn read_page<'py>(&mut self, py: Python<'py>, index: [Ix; 6]) -> PyResult<Bound<'py, PyArray6<u16>>> {
+        match self.inner.read_page(index) {
+            Ok(data) => Ok(data.into_pyarray_bound(py)),
+            Err(e) => Err(PyRuntimeError::new_err(e.to_string())),
+        }
+    }
+
     #[getter]
     pub fn image_extent(&self) -> [Ix; 6] {
         self.inner.info().image_extent
@@ -29,7 +36,11 @@ impl PyMLImageFormatReader {
 
     #[getter]
     pub fn world_matrix<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
-        self.inner.info().world_matrix.clone().into_pyarray_bound(py)
+        self.inner
+            .info()
+            .world_matrix
+            .clone()
+            .into_pyarray_bound(py)
     }
 }
 
