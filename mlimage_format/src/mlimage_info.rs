@@ -13,6 +13,16 @@ pub struct MLImageInfo {
     pub world_matrix: ndarray::Array2<f64>,
 }
 
+pub fn collect6d<Iter: Iterator>(iter: Iter) -> [Iter::Item; 6] {
+    let vec6d: Vec<Iter::Item> = iter.collect();
+    vec6d.try_into().unwrap_or_else(|vec: Vec<Iter::Item>| {
+        panic!(
+            "by construction, we must have 6D vectors, not {}D!",
+            vec.len()
+        )
+    })
+}
+
 impl MLImageInfo {
     /// Image extent in (x, y, z, c, t, u) order (logical order, first index
     /// being the fastest changing one, aka "Fortran order")
@@ -43,14 +53,12 @@ impl MLImageInfo {
     }
 
     pub fn page_count_per_dim(&self) -> [usize; 6] {
-        let page_count_per_dim: Vec<usize> = self.image_extent
-            .iter()
-            .zip(self.page_extent.iter())
-            .map(|(ie, pe)| num::Integer::div_ceil(ie, pe))
-            .collect();
-        page_count_per_dim
-            .try_into()
-            .expect("by construction, we must have 6D extents")
+        collect6d(
+            self.image_extent
+                .iter()
+                .zip(self.page_extent.iter())
+                .map(|(ie, pe)| num::Integer::div_ceil(ie, pe)),
+        )
     }
 
     pub fn from_tag_list(tag_list: TagList) -> Result<Self, TagError> {
@@ -62,29 +70,17 @@ impl MLImageInfo {
 
         let dtype_size: usize = tag_list.parse_tag_value("ML_IMAGE_DTYPE_SIZE").unwrap();
 
-        let image_extent: Vec<Ix> = "XYZCTU"
-            .chars()
-            .filter_map(|dim| {
-                tag_list
-                    .parse_tag_value(&format!("ML_IMAGE_EXT_{}", dim))
-                    .ok()
-            })
-            .collect();
-        let image_extent: [Ix; 6] = image_extent
-            .try_into()
-            .expect("by construction, we must have 6D extents");
+        let image_extent: [Ix; 6] = collect6d("XYZCTU".chars().filter_map(|dim| {
+            tag_list
+                .parse_tag_value(&format!("ML_IMAGE_EXT_{}", dim))
+                .ok()
+        }));
 
-        let page_extent: Vec<usize> = "XYZCTU"
-            .chars()
-            .filter_map(|dim| {
-                tag_list
-                    .parse_tag_value(&format!("ML_PAGE_EXT_{}", dim))
-                    .ok()
-            })
-            .collect();
-        let page_extent: [Ix; 6] = page_extent
-            .try_into()
-            .expect("by construction, we must have 6D extents");
+        let page_extent: [Ix; 6] = collect6d("XYZCTU".chars().filter_map(|dim| {
+            tag_list
+                .parse_tag_value(&format!("ML_PAGE_EXT_{}", dim))
+                .ok()
+        }));
 
         let uses_partial_pages = tag_list
             .parse_tag_value::<i8>("ML_USES_PARTIAL_PAGES")
