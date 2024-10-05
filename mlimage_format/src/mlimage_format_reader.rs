@@ -1,4 +1,5 @@
 use std::{
+    cmp,
     error::Error,
     fs::File,
     io::{BufRead, BufReader, Read, Seek},
@@ -6,7 +7,8 @@ use std::{
 };
 
 use bytemuck::{cast_slice, cast_slice_mut, from_bytes, Pod};
-use ndarray::{ArrayView, Ix};
+use itertools::{izip, Itertools};
+use ndarray::{s, ArrayView, Ix};
 use winnow::{
     binary as wb,
     error::{ContextError, ErrMode},
@@ -15,7 +17,7 @@ use winnow::{
 
 use crate::{
     errors::{IncompleteFile, InvalidFile},
-    mlimage_info::MLImageInfo,
+    mlimage_info::{collect6d, reverse6d, unwrap6d, MLImageInfo},
     parser::{parse_info, parse_page_idx_entry, tag_list_size_in_bytes, version_header},
 };
 
@@ -133,10 +135,10 @@ impl MLImageFormatReader {
         let mut page_extent_c = self.info.page_extent_c();
         if self.info.uses_partial_pages {
             let image_extent_c = self.info.image_extent_c();
-            for dim in 0..6 {
-                let start_pos = index[5 - dim] * page_extent_c[dim];
-                if image_extent_c[dim] < start_pos + page_extent_c[dim] {
-                    page_extent_c[dim] = image_extent_c[dim] - start_pos;
+            for dim_c in 0..6 {
+                let start_pos = index[5 - dim_c] * page_extent_c[dim_c];
+                if image_extent_c[dim_c] < start_pos + page_extent_c[dim_c] {
+                    page_extent_c[dim_c] = image_extent_c[dim_c] - start_pos;
                 }
             }
         }
@@ -237,6 +239,94 @@ impl MLImageFormatReader {
         }
 
         drop(std::mem::replace(array, result));
+    }
+
+    pub fn get_tile<VoxelType>(
+        &mut self,
+        box_start: [Ix; 6],
+        box_end: [Ix; 6],
+    ) -> Result<ndarray::Array6<VoxelType>, Box<dyn Error>>
+    where
+        VoxelType: Default + Pod,
+    {
+        // determine page index of first voxel
+        let page_index_start: [Ix; 6] =
+            collect6d(izip!(&box_start, &self.info.page_extent).map(|(pos, ext)| pos / ext));
+
+        // end page index is a little more complex:
+        // * last voxel is (pos - 1), and its page must still be included
+        // * thus, (exclusive) end page index must be one higher
+        // * (pos - 1) / ext + 1 is identical to (pos + ext - 1) / ext
+        //   but the latter prevents problems with pos = 0usize
+        let page_index_end: [Ix; 6] = collect6d(
+            izip!(&box_end, &self.info.page_extent).map(|(pos, ext)| (pos + ext - 1) / ext),
+        );
+
+        let pages_per_dim =
+            collect6d(izip!(&page_index_start, &page_index_end).map(|(s, e)| (e - s)));
+
+        let box_extent_c = collect6d(
+            izip!(box_start.iter().rev(), box_end.iter().rev()).map(|(start, end)| (end - start)),
+        );
+
+        let mut result =
+            ndarray::Array6::<VoxelType>::from_elem(box_extent_c, VoxelType::default());
+
+        // dim_c = C-style indexing, memory order (UTCZYX)
+        for page_index_c in (0..6)
+            .into_iter()
+            .map(|dim_c| page_index_start[5 - dim_c]..page_index_end[5 - dim_c])
+            .multi_cartesian_product()
+        {
+            let page_data =
+                self.read_page::<VoxelType>(reverse6d(page_index_c.clone().into_iter()))?;
+
+            let page_start_c: [Ix; 6] = collect6d(
+                izip!(&page_index_c, self.info.page_extent.iter().rev()).map(|(pi, ext)| pi * ext),
+            );
+
+            // the first page might start before the requested tile, so we might need a source offset
+            let source_offset_c: [Ix; 6] = collect6d(
+                izip!(box_start.iter().rev(), &page_start_c).map(|(bs, ps)| bs.saturating_sub(*ps)),
+            );
+
+            // find position in resulting array to copy data to
+            // (using saturating_sub() in case the page starts before the requested tile)
+            let target_offset_c: [Ix; 6] = collect6d(
+                izip!(&page_start_c, reverse6d(box_start.clone().into_iter()))
+                    .map(|(ps, bs)| ps.saturating_sub(bs)),
+            );
+
+            // page
+            let source_end_c: [Ix; 6] = collect6d(
+                izip!(
+                    reverse6d(box_end.clone().into_iter()),
+                    &page_start_c,
+                    page_data.shape()
+                )
+                .map(|(be, ps, s)| cmp::min(ps + s, be) - ps),
+            );
+
+            result
+                .slice_mut(s![
+                    target_offset_c[0]..target_offset_c[0] + source_end_c[0] - source_offset_c[0],
+                    target_offset_c[1]..target_offset_c[1] + source_end_c[1] - source_offset_c[1],
+                    target_offset_c[2]..target_offset_c[2] + source_end_c[2] - source_offset_c[2],
+                    target_offset_c[3]..target_offset_c[3] + source_end_c[3] - source_offset_c[3],
+                    target_offset_c[4]..target_offset_c[4] + source_end_c[4] - source_offset_c[4],
+                    target_offset_c[5]..target_offset_c[5] + source_end_c[5] - source_offset_c[5],
+                ])
+                .assign(&page_data.slice(s![
+                    source_offset_c[0]..source_end_c[0],
+                    source_offset_c[1]..source_end_c[1],
+                    source_offset_c[2]..source_end_c[2],
+                    source_offset_c[3]..source_end_c[3],
+                    source_offset_c[4]..source_end_c[4],
+                    source_offset_c[5]..source_end_c[5],
+                ]));
+        }
+
+        Ok(result)
     }
 }
 

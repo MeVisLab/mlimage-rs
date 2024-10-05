@@ -13,14 +13,22 @@ pub struct MLImageInfo {
     pub world_matrix: ndarray::Array2<f64>,
 }
 
-pub fn collect6d<Iter: Iterator>(iter: Iter) -> [Iter::Item; 6] {
-    let vec6d: Vec<Iter::Item> = iter.collect();
-    vec6d.try_into().unwrap_or_else(|vec: Vec<Iter::Item>| {
+pub fn unwrap6d<T>(vec: Vec<T>) -> [T; 6] {
+    vec.try_into().unwrap_or_else(|vec: Vec<T>| {
         panic!(
             "by construction, we must have 6D vectors, not {}D!",
             vec.len()
         )
     })
+}
+
+pub fn collect6d<Iter: Iterator>(iter: Iter) -> [Iter::Item; 6] {
+    let vec6d: Vec<Iter::Item> = iter.collect();
+    unwrap6d(vec6d)
+}
+
+pub fn reverse6d<Iter: DoubleEndedIterator>(iter: Iter) -> [Iter::Item; 6] {
+    collect6d(iter.rev())
 }
 
 impl MLImageInfo {
@@ -52,6 +60,8 @@ impl MLImageInfo {
         result
     }
 
+    /// Number of pages per dimension in (x, y, z, c, t, u) order (logical
+    /// order, first index being the fastest changing one, aka "Fortran order")
     pub fn page_count_per_dim(&self) -> [usize; 6] {
         collect6d(
             self.image_extent
