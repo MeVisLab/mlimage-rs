@@ -96,6 +96,7 @@ impl MLImageFormatReader {
 
     pub fn get_page_idx_entry(&mut self, index: [Ix; 6]) -> Result<&PageIdxEntry, Box<dyn Error>> {
         if self.page_idx_table[index].is_none() {
+            // TODO: read many page idx entries at once, not one by one
             let mut flat_page_index = 0;
             for dim in 0..6 {
                 flat_page_index *= self.page_idx_table.shape()[5 - dim];

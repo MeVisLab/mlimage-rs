@@ -15,4 +15,9 @@ bytemuck = "1.15.0"
 itertools = "0.13.0"
 
 [dev-dependencies]
+criterion = "0.5.1"
 hexdump = "0.1.1"
+
+[[bench]]
+name = "benchmark_reading_large_mlimage"
+harness = false
