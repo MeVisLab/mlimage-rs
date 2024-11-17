@@ -197,6 +197,7 @@ impl MLImageFormatReader {
                         .expect("decompression failed");
 
                     if byte_plane_reordering && self.info.dtype_size > 1 {
+                        // 2024-11-17: this currently takes 80% of the runtime!
                         Self::unreorder_byte_planes(&mut result, self.info.dtype_size);
                     }
 
@@ -229,11 +230,9 @@ impl MLImageFormatReader {
             .expect("freshly constructed array should be contiguous");
         let target_u8_buf: &mut [u8] = cast_slice_mut(target_voxeltype_buf);
 
-        let mut reordered_shape: [Ix; 2] = [0; 2];
-        reordered_shape[0] = dtype_size;
-        reordered_shape[1] = array.shape().iter().product();
-        let reordered_view = ArrayView::from_shape(reordered_shape, u8_buf)
-            .expect("carefully crafted shape should fit");
+        let reordered_view =
+            ArrayView::from_shape([dtype_size, array.shape().iter().product()], u8_buf)
+                .expect("carefully crafted shape should fit");
         for (src, dest) in reordered_view.t().iter().zip(target_u8_buf.iter_mut()) {
             *dest = *src;
         }
