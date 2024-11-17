@@ -218,22 +218,22 @@ impl MLImageFormatReader {
     ) where
         VoxelType: Default + Pod,
     {
-        let voxeltype_buf = array
+        let src_buf_voxeltype = array
             .as_slice()
             .expect("freshly constructed array should be contiguous");
-        let u8_buf: &[u8] = cast_slice(voxeltype_buf);
+        let src_buf_u8: &[u8] = cast_slice(src_buf_voxeltype);
 
         let mut result =
             ndarray::Array6::<VoxelType>::from_elem(array.raw_dim(), VoxelType::default());
-        let target_voxeltype_buf = result
+        let dest_buf_voxeltype = result
             .as_slice_mut()
             .expect("freshly constructed array should be contiguous");
-        let target_u8_buf: &mut [u8] = cast_slice_mut(target_voxeltype_buf);
+        let dest_buf_u8: &mut [u8] = cast_slice_mut(dest_buf_voxeltype);
 
         let reordered_view =
-            ArrayView::from_shape([dtype_size, array.shape().iter().product()], u8_buf)
+            ArrayView::from_shape([dtype_size, array.shape().iter().product()], src_buf_u8)
                 .expect("carefully crafted shape should fit");
-        for (src, dest) in reordered_view.t().iter().zip(target_u8_buf.iter_mut()) {
+        for (src, dest) in reordered_view.t().iter().zip(dest_buf_u8.iter_mut()) {
             *dest = *src;
         }
 
