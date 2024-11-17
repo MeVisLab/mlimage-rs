@@ -120,7 +120,7 @@ impl MLImageFormatReader {
             self.page_idx_table[index] = Some(page_idx_entry);
         }
 
-        Ok(&self.page_idx_table[index].as_ref().unwrap())
+        Ok(self.page_idx_table[index].as_ref().unwrap())
     }
 
     pub fn read_page<VoxelType>(
@@ -149,9 +149,8 @@ impl MLImageFormatReader {
 
         // constant pages are stored in an optimized way
         if page_idx_entry.start_offset < page_idx_entry.end_offset {
-            self.reader.seek(std::io::SeekFrom::Start(
-                page_idx_entry.start_offset.try_into().unwrap(),
-            ))?;
+            self.reader
+                .seek(std::io::SeekFrom::Start(page_idx_entry.start_offset))?;
             let read_size = page_idx_entry.end_offset - page_idx_entry.start_offset;
             let target_voxeltype_buf = result
                 .as_slice_mut()
@@ -161,7 +160,7 @@ impl MLImageFormatReader {
                 .info
                 .tag_list
                 .tag_value("ML_COMPRESSOR_NAME")
-                .unwrap_or(String::default());
+                .unwrap_or_default();
             match &compressor_name[..] {
                 "" => {
                     assert!(target_u8_buf.len() == read_size.try_into().unwrap());
