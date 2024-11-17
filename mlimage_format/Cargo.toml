@@ -21,3 +21,7 @@ hexdump = "0.1.1"
 [[bench]]
 name = "benchmark_reading_large_mlimage"
 harness = false
+
+[profile.bench]
+debug = true
+strip = "none"
