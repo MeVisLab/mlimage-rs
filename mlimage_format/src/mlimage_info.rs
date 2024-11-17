@@ -41,7 +41,7 @@ impl MLImageInfo {
     /// Image extent in (u, c, t, z, y, x) order ("C order", memory order, with
     /// the last index being the fastest changing one)
     pub fn image_extent_c(&self) -> [Ix; 6] {
-        let mut result = self.image_extent.clone();
+        let mut result = self.image_extent;
         result.reverse();
         result
     }
@@ -55,7 +55,7 @@ impl MLImageInfo {
     /// Page extent in (u, c, t, z, y, x) order ("C order", memory order, with
     /// the last index being the fastest changing one)
     pub fn page_extent_c(&self) -> [Ix; 6] {
-        let mut result = self.page_extent.clone();
+        let mut result = self.page_extent;
         result.reverse();
         result
     }

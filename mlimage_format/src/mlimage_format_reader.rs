@@ -294,14 +294,14 @@ impl MLImageFormatReader {
             // find position in resulting array to copy data to
             // (using saturating_sub() in case the page starts before the requested tile)
             let target_offset_c: [Ix; 6] = collect6d(
-                izip!(&page_start_c, reverse6d(box_start.clone().into_iter()))
+                izip!(&page_start_c, reverse6d(box_start.into_iter()))
                     .map(|(ps, bs)| ps.saturating_sub(bs)),
             );
 
             // page
             let source_end_c: [Ix; 6] = collect6d(
                 izip!(
-                    reverse6d(box_end.clone().into_iter()),
+                    reverse6d(box_end.into_iter()),
                     &page_start_c,
                     page_data.shape()
                 )
