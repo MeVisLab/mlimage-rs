@@ -176,10 +176,10 @@ impl MLImageFormatReader {
                     self.reader.read_exact(&mut buf[..])?;
 
                     // TODO: unwrap() -> ?
-                    let (uncompressed_size, flags) = ((
+                    let (uncompressed_size, flags) = (
                         wb::i64::<&[u8], ()>(wb::Endianness::Little),
                         wb::i64(wb::Endianness::Little),
-                    ))
+                    )
                         .parse_next(&mut &buf[..])
                         .unwrap();
                     let uncompressed_size = usize::try_from(uncompressed_size)
@@ -258,11 +258,11 @@ impl MLImageFormatReader {
         // * (pos - 1) / ext + 1 is identical to (pos + ext - 1) / ext
         //   but the latter prevents problems with pos = 0usize
         let page_index_end: [Ix; 6] = collect6d(
-            izip!(&box_end, &self.info.page_extent).map(|(pos, ext)| (pos + ext - 1) / ext),
+            izip!(&box_end, &self.info.page_extent).map(|(pos, ext)| pos.div_ceil(*ext)),
         );
 
-        let pages_per_dim =
-            collect6d(izip!(&page_index_start, &page_index_end).map(|(s, e)| (e - s)));
+        //let pages_per_dim =
+        //    collect6d(izip!(&page_index_start, &page_index_end).map(|(s, e)| (e - s)));
 
         let box_extent_c = collect6d(
             izip!(box_start.iter().rev(), box_end.iter().rev()).map(|(start, end)| (end - start)),
@@ -273,7 +273,6 @@ impl MLImageFormatReader {
 
         // dim_c = C-style indexing, memory order (UTCZYX)
         for page_index_c in (0..6)
-            .into_iter()
             .map(|dim_c| page_index_start[5 - dim_c]..page_index_end[5 - dim_c])
             .multi_cartesian_product()
         {

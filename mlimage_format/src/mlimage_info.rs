@@ -94,7 +94,7 @@ impl MLImageInfo {
 
         let uses_partial_pages = tag_list
             .parse_tag_value::<i8>("ML_USES_PARTIAL_PAGES")
-            .map_or(false, |pp| pp > 0);
+            .is_ok_and(|pp| pp > 0);
 
         let mut world_matrix = ndarray::Array2::zeros((4, 4));
         for row in 0..4 {
