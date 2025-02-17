@@ -49,7 +49,7 @@ impl MLImageInfo {
     /// Page extent in (x, y, z, c, t, u) order (logical order, first index
     /// being the fastest changing one, aka "Fortran order")
     pub fn page_extent(&self) -> [Ix; 6] {
-        self.image_extent
+        self.page_extent
     }
 
     /// Page extent in (u, c, t, z, y, x) order ("C order", memory order, with
