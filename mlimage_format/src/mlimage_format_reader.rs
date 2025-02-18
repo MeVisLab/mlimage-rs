@@ -9,6 +9,7 @@ use std::{
 use bytemuck::{cast_slice, cast_slice_mut, from_bytes, Pod};
 use itertools::{izip, Itertools};
 use ndarray::{s, ArrayView, Ix};
+use num::Integer;
 use winnow::{
     binary as wb,
     error::{ContextError, ErrMode},
@@ -284,9 +285,8 @@ impl MLImageFormatReader {
         // * thus, (exclusive) end page index must be one higher
         // * (pos - 1) / ext + 1 is identical to (pos + ext - 1) / ext
         //   but the latter prevents problems with pos = 0usize
-        let page_index_end: [Ix; 6] = collect6d(
-            izip!(&box_end, &self.info.page_extent).map(|(pos, ext)| pos.div_ceil(*ext)),
-        );
+        let page_index_end: [Ix; 6] =
+            collect6d(izip!(&box_end, &self.info.page_extent).map(|(pos, ext)| pos.div_ceil(ext)));
 
         //let pages_per_dim =
         //    collect6d(izip!(&page_index_start, &page_index_end).map(|(s, e)| (e - s)));
