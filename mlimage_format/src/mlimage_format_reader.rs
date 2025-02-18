@@ -233,8 +233,7 @@ impl MLImageFormatReader {
 
         let mut src_iter = src_buf_u8.iter();
         for byte_plane_index in 0..dtype_size {
-            let mut offset_iter = dest_buf_u8.iter_mut();
-            for _ in 0..byte_plane_index { offset_iter.next().unwrap(); }
+            let offset_iter = dest_buf_u8.iter_mut().skip(byte_plane_index);
             for (dest, src) in offset_iter.step_by(dtype_size).zip(&mut src_iter) {
                 *dest = *src;
             }
