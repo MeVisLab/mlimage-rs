@@ -237,6 +237,8 @@ impl MLImageFormatReader {
                     let byte_plane_reordering = (flags & 1) > 0;
                     let diff_code_data = (flags & 2) > 0;
 
+                    assert!(!diff_code_data, "diff (de)coding not implemented yet");
+
                     assert!(target_u8_buf.len() == uncompressed_size);
 
                     // TODO: what's the meaning of the return code? its a usize that
