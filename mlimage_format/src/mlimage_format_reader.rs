@@ -8,7 +8,7 @@ use std::{
 
 use bytemuck::{cast_slice, cast_slice_mut, from_bytes, Pod};
 use itertools::{izip, Itertools};
-use ndarray::{s, ArrayView, Ix};
+use ndarray::{s, Ix};
 use num::Integer;
 use winnow::{
     binary as wb,
@@ -18,7 +18,7 @@ use winnow::{
 
 use crate::{
     errors::{IncompleteFile, InvalidFile},
-    mlimage_info::{collect6d, reverse6d, unwrap6d, MLImageInfo},
+    mlimage_info::{collect6d, reverse6d, MLImageInfo},
     parser::{parse_info, parse_page_idx_entry, tag_list_size_in_bytes, version_header},
 };
 
@@ -30,7 +30,7 @@ pub struct VersionHeader {
 }
 
 struct ReaderWithSmartSeeking {
-    reader: BufReader<File>
+    reader: BufReader<File>,
 }
 
 impl ReaderWithSmartSeeking {
@@ -140,8 +140,9 @@ impl MLImageFormatReader {
         let flat_start_index = (flat_start_index / chunk_read_count) * chunk_read_count;
         let flat_end_index = min(flat_start_index + chunk_read_count, table_entries.len());
 
-        for flat_page_index in flat_start_index..flat_end_index {
-            let page_idx_entry = &mut table_entries[flat_page_index];
+        for (flat_page_index, page_idx_entry) in (flat_start_index..flat_end_index)
+            .zip(table_entries[flat_start_index..flat_end_index].iter_mut())
+        {
             if page_idx_entry.is_none() {
                 self.reader.smart_seek(
                     self.page_idx_table_start + flat_page_index as u64 * page_idx_entry_size as u64,
