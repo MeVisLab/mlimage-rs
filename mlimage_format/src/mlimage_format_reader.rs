@@ -50,6 +50,7 @@ type PageIdxTable = ndarray::Array6<Option<PageIdxEntry>>;
 
 const VERSION_HEADER_SIZE: usize = "MLImageFormatVersion.".len() + 3 * 4;
 const PAGE_IDX_ENTRY_SIZE: usize = 8 + 8 + 5 + 11;
+const BLOCK_READ_SIZE: usize = 64 * 1024;
 
 impl MLImageFormatReader {
     pub fn info(&self) -> &MLImageInfo {
@@ -58,7 +59,7 @@ impl MLImageFormatReader {
 
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
         let f = File::open(path)?;
-        let mut reader = BufReader::with_capacity(64 * 1024, f);
+        let mut reader = BufReader::with_capacity(BLOCK_READ_SIZE, f);
         reader.fill_buf()?;
 
         let (version, tag_list_size) = (version_header, tag_list_size_in_bytes)
