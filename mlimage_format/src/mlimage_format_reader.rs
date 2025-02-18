@@ -28,10 +28,34 @@ pub struct VersionHeader {
     pub patch: u16,
 }
 
+struct ReaderWithSmartSeeking {
+    reader: BufReader<File>
+}
+
+impl ReaderWithSmartSeeking {
+    fn new(mut reader: BufReader<File>) -> Self {
+        Self { reader }
+    }
+
+    fn smart_seek(&mut self, file_offset: u64) -> std::io::Result<()> {
+        let rel_offset = (file_offset - self.reader.stream_position()?) as i64;
+        if rel_offset != 0 {
+            self.reader.seek_relative(rel_offset)?;
+        }
+        Ok(())
+    }
+}
+
+impl Read for ReaderWithSmartSeeking {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.reader.read(buf)
+    }
+}
+
 pub struct MLImageFormatReader {
     version: VersionHeader,
     info: MLImageInfo,
-    reader: BufReader<File>,
+    reader: ReaderWithSmartSeeking,
     page_idx_table_start: u64,
     pub page_idx_table: PageIdxTable,
 }
@@ -86,6 +110,8 @@ impl MLImageFormatReader {
 
         let page_idx_table = ndarray::Array::from_elem(info.page_count_per_dim(), None);
 
+        let reader = ReaderWithSmartSeeking::new(reader);
+
         Ok(Self {
             version,
             info,
@@ -106,9 +132,9 @@ impl MLImageFormatReader {
             let page_idx_entry_size = PAGE_IDX_ENTRY_SIZE + self.info.dtype_size;
 
             // TODO: discards buffer; seek_relative should be more efficient:
-            self.reader.seek(std::io::SeekFrom::Start(
+            self.reader.smart_seek(
                 self.page_idx_table_start + flat_page_index as u64 * page_idx_entry_size as u64,
-            ))?;
+            )?;
             let mut buf = bytes::BytesMut::zeroed(page_idx_entry_size);
             self.reader.read_exact(&mut buf[..])?;
 
@@ -150,8 +176,7 @@ impl MLImageFormatReader {
 
         // constant pages are stored in an optimized way
         if page_idx_entry.start_offset < page_idx_entry.end_offset {
-            self.reader
-                .seek(std::io::SeekFrom::Start(page_idx_entry.start_offset))?;
+            self.reader.smart_seek(page_idx_entry.start_offset)?;
             let read_size = page_idx_entry.end_offset - page_idx_entry.start_offset;
             let target_voxeltype_buf = result
                 .as_slice_mut()
