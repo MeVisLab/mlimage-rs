@@ -230,11 +230,13 @@ impl MLImageFormatReader {
             .expect("freshly constructed array should be contiguous");
         let dest_buf_u8: &mut [u8] = cast_slice_mut(dest_buf_voxeltype);
 
-        let reordered_view =
-            ArrayView::from_shape([dtype_size, array.shape().iter().product()], src_buf_u8)
-                .expect("carefully crafted shape should fit");
-        for (src, dest) in reordered_view.t().iter().zip(dest_buf_u8.iter_mut()) {
-            *dest = *src;
+        let mut src_iter = src_buf_u8.iter();
+        for byte_plane_index in 0..dtype_size {
+            let mut offset_iter = dest_buf_u8.iter_mut();
+            for _ in 0..byte_plane_index { offset_iter.next().unwrap(); }
+            for (dest, src) in offset_iter.step_by(dtype_size).zip(&mut src_iter) {
+                *dest = *src;
+            }
         }
 
         drop(std::mem::replace(array, result));
