@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use mlimage_rs::mlimage_format_reader::MLImageFormatReader;
 
-fn read_large_mlimage(c: &mut Criterion) {
+fn read_part_of_large_mlimage(c: &mut Criterion) {
     let mut reader = MLImageFormatReader::open("../assets/test_large.mlimage").unwrap();
     c.bench_function("get_tile(box on 2 slices)", |b| {
         b.iter(|| {
@@ -12,7 +12,7 @@ fn read_large_mlimage(c: &mut Criterion) {
     });
 }
 
-fn read_part_of_large_mlimage(c: &mut Criterion) {
+fn read_large_mlimage(c: &mut Criterion) {
     let mut reader = MLImageFormatReader::open("../assets/test_large.mlimage").unwrap();
     let mut group = c.benchmark_group("slow-test");
     group.sample_size(10).bench_function("get_tile(full extent)", |b| {
@@ -24,5 +24,5 @@ fn read_part_of_large_mlimage(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, read_large_mlimage, read_part_of_large_mlimage);
+criterion_group!(benches, read_part_of_large_mlimage, read_large_mlimage);
 criterion_main!(benches);

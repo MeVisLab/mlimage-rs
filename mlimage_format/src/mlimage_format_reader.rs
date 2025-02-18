@@ -276,9 +276,6 @@ impl MLImageFormatReader {
             .map(|dim_c| page_index_start[5 - dim_c]..page_index_end[5 - dim_c])
             .multi_cartesian_product()
         {
-            let page_data =
-                self.read_page::<VoxelType>(reverse6d(page_index_c.clone().into_iter()))?;
-
             let page_start_c: [Ix; 6] = collect6d(
                 izip!(&page_index_c, self.info.page_extent.iter().rev()).map(|(pi, ext)| pi * ext),
             );
@@ -294,6 +291,10 @@ impl MLImageFormatReader {
                 izip!(&page_start_c, reverse6d(box_start.into_iter()))
                     .map(|(ps, bs)| ps.saturating_sub(bs)),
             );
+
+            // TODO: can we directly read into result?
+            let page_data =
+                self.read_page::<VoxelType>(reverse6d(page_index_c.clone().into_iter()))?;
 
             // page
             let source_end_c: [Ix; 6] = collect6d(
