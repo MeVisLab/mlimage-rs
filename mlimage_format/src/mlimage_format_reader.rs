@@ -1,5 +1,5 @@
 use std::{
-    cmp,
+    cmp::{self, min},
     error::Error,
     fs::File,
     io::{BufRead, BufReader, Read, Seek},
@@ -34,7 +34,7 @@ struct ReaderWithSmartSeeking {
 }
 
 impl ReaderWithSmartSeeking {
-    fn new(mut reader: BufReader<File>) -> Self {
+    fn new(reader: BufReader<File>) -> Self {
         Self { reader }
     }
 
@@ -122,30 +122,51 @@ impl MLImageFormatReader {
         })
     }
 
+    fn read_page_idx_entries(&mut self, index: [Ix; 6]) -> Result<(), Box<dyn Error>> {
+        let mut flat_start_index = 0;
+        for dim in 0..6 {
+            flat_start_index *= self.page_idx_table.shape()[5 - dim];
+            flat_start_index += index[5 - dim];
+        }
+
+        let page_idx_entry_size = PAGE_IDX_ENTRY_SIZE + self.info.dtype_size;
+        let table_entries = self
+            .page_idx_table
+            .as_slice_mut()
+            .expect("page_idx_table should be contiguous");
+
+        // for optimization, we read multiple entries at once (otherwise we seek a lot!)
+        let chunk_read_count = BLOCK_READ_SIZE / page_idx_entry_size;
+        let flat_start_index = (flat_start_index / chunk_read_count) * chunk_read_count;
+        let flat_end_index = min(flat_start_index + chunk_read_count, table_entries.len());
+
+        for flat_page_index in flat_start_index..flat_end_index {
+            let page_idx_entry = &mut table_entries[flat_page_index];
+            if page_idx_entry.is_none() {
+                self.reader.smart_seek(
+                    self.page_idx_table_start + flat_page_index as u64 * page_idx_entry_size as u64,
+                )?;
+                let mut buf = bytes::BytesMut::zeroed(page_idx_entry_size);
+                self.reader.read_exact(&mut buf[..])?;
+
+                *page_idx_entry = Some(
+                    parse_page_idx_entry(self.info.endianness, self.info.dtype_size)
+                        .parse_next(&mut &buf[..])
+                        .map_err(|e: ErrMode<ContextError>| {
+                            InvalidFile::from(
+                                e.into_inner().expect("not expecting incomplete input here"),
+                            )
+                        })?,
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn get_page_idx_entry(&mut self, index: [Ix; 6]) -> Result<&PageIdxEntry, Box<dyn Error>> {
         if self.page_idx_table[index].is_none() {
-            // TODO: read many page idx entries at once, not one by one
-            let mut flat_page_index = 0;
-            for dim in 0..6 {
-                flat_page_index *= self.page_idx_table.shape()[5 - dim];
-                flat_page_index += index[5 - dim];
-            }
-            let page_idx_entry_size = PAGE_IDX_ENTRY_SIZE + self.info.dtype_size;
-
-            // TODO: discards buffer; seek_relative should be more efficient:
-            self.reader.smart_seek(
-                self.page_idx_table_start + flat_page_index as u64 * page_idx_entry_size as u64,
-            )?;
-            let mut buf = bytes::BytesMut::zeroed(page_idx_entry_size);
-            self.reader.read_exact(&mut buf[..])?;
-
-            let page_idx_entry = parse_page_idx_entry(self.info.endianness, self.info.dtype_size)
-                .parse_next(&mut &buf[..])
-                .map_err(|e: ErrMode<ContextError>| {
-                    InvalidFile::from(e.into_inner().expect("not expecting incomplete input here"))
-                })?;
-
-            self.page_idx_table[index] = Some(page_idx_entry);
+            self.read_page_idx_entries(index)?;
         }
 
         Ok(self.page_idx_table[index].as_ref().unwrap())
