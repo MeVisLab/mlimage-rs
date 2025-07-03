@@ -1,6 +1,4 @@
-==========
-mlimage-rs
-==========
+# mlimage-rs
 
 This is a Rust implementation of the MLImage file format that is designed and
 implemented for MeVisLab's 6D medical image volumes.  For now, this is an
