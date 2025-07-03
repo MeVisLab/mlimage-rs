@@ -41,7 +41,8 @@ impl ReaderWithSmartSeeking {
     }
 
     async fn smart_seek(&mut self, file_offset: u64) -> std::io::Result<()> {
-        let rel_offset = (file_offset - self.reader.stream_position().await?) as i64;
+        // would wrapping_sub() + casting be cleaner or not?
+        let rel_offset = file_offset as i64 - self.reader.stream_position().await? as i64;
         if rel_offset != 0 {
             self.reader
                 .seek(std::io::SeekFrom::Current(rel_offset))
