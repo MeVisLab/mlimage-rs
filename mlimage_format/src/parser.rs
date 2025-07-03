@@ -1,13 +1,7 @@
 use std::str::from_utf8;
 
 use winnow::{
-    ascii::{dec_uint, digit1, space0},
-    binary as wb,
-    combinator::{delimited, preceded, repeat, terminated},
-    error::{ContextError, ErrMode, ErrorKind, FromExternalError, ParserError},
-    stream::{AsBytes, Stream, StreamIsPartial},
-    token::take_until,
-    PResult, Parser,
+    ascii::{dec_uint, digit1, space0}, binary as wb, combinator::{delimited, preceded, repeat, terminated}, error::{ContextError, ErrMode, ErrorKind, FromExternalError, ParserError}, stream::{AsBytes, Stream, StreamIsPartial}, token::take_until, ModalResult, Parser
 };
 
 use crate::{
@@ -16,7 +10,7 @@ use crate::{
     tag_list::TagList,
 };
 
-pub fn version_header(input: &mut &[u8]) -> PResult<VersionHeader> {
+pub fn version_header(input: &mut &[u8]) -> ModalResult<VersionHeader> {
     preceded(
         "MLImageFormatVersion.",
         (
@@ -33,17 +27,17 @@ pub fn version_header(input: &mut &[u8]) -> PResult<VersionHeader> {
     .parse_next(input)
 }
 
-pub fn tag_string(input: &mut &[u8]) -> PResult<String> {
+pub fn tag_string(input: &mut &[u8]) -> ModalResult<String> {
     terminated(take_until(0.., 0u8), 0u8)
         .try_map(|buf: &[u8]| from_utf8(buf).map(|s| s.to_owned()))
         .parse_next(input)
 }
 
-pub fn tag_pair(input: &mut &[u8]) -> PResult<(String, String)> {
+pub fn tag_pair(input: &mut &[u8]) -> ModalResult<(String, String), ContextError> {
     (tag_string, tag_string).parse_next(input)
 }
 
-pub fn tag_list_size_in_bytes(input: &mut &[u8]) -> PResult<usize> {
+pub fn tag_list_size_in_bytes(input: &mut &[u8]) -> ModalResult<usize> {
     delimited(
         "ML_TAG_LIST_SIZE_IN_BYTES\0",
         dec_uint::<_, usize, _>,
@@ -52,7 +46,7 @@ pub fn tag_list_size_in_bytes(input: &mut &[u8]) -> PResult<usize> {
     .parse_next(input)
 }
 
-pub fn tag_list(input: &mut &[u8]) -> PResult<Vec<(String, String)>> {
+pub fn tag_list(input: &mut &[u8]) -> ModalResult<Vec<(String, String)>> {
     repeat(0.., tag_pair).parse_next(input)
 }
 
@@ -105,7 +99,7 @@ where
         )
 }
 
-pub fn parse_info(input: &mut &[u8]) -> PResult<MLImageInfo> {
+pub fn parse_info(input: &mut &[u8]) -> ModalResult<MLImageInfo> {
     let _version = version_header.parse_next(input)?;
 
     // tag_list_size includes this first tag pair, so we need to checkpoint the input:
