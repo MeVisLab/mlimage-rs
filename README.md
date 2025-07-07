@@ -9,7 +9,9 @@ There are many things that are unfinished, incomplete, and not perfect, but at
 least as of 2024-04-14, I could already read 16bit image data from an .mlimage
 file in python, although still quite clumsily.
 
-References
-----------
+As of 2024-10-05, there is also a proper `get_tile()` implementation in Rust
+that makes it much less clumsy.
+
+## References
 
 https://mevislabdownloads.mevis.de/docs/current/MeVisLab/Resources/Documentation/Publish/SDK/ToolBoxReference/mlImageFormatTagList_8h_source.html
