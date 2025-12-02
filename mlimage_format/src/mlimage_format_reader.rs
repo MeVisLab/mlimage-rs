@@ -239,15 +239,24 @@ impl MLImageFormatReader {
                     );
                     self.reader.read_exact(&mut buf[..]).await?;
 
-                    // TODO: unwrap() -> ?
+                    // parse LZ4 compression header
                     let (uncompressed_size, flags) = (
                         wb::i64::<&[u8], ()>(wb::Endianness::Little),
                         wb::i64(wb::Endianness::Little),
                     )
                         .parse_next(&mut &buf[..])
-                        .unwrap();
-                    let uncompressed_size = usize::try_from(uncompressed_size)
-                        .expect("uncompressed page size should fit into usize");
+                        .map_err(|_| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "failed to parse LZ4 header",
+                            )
+                        })?;
+                    let uncompressed_size = usize::try_from(uncompressed_size).map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "invalid uncompressed size",
+                        )
+                    })?;
 
                     let byte_plane_reordering = (flags & 1) > 0;
                     let diff_code_data = (flags & 2) > 0;
@@ -259,8 +268,12 @@ impl MLImageFormatReader {
                     // TODO: what's the meaning of the return code? its a usize that
                     // is smaller than uncompressed_size, but larger than read_size
                     // (and not exactly the difference)
-                    let _decompressed = lz4_flex::decompress_into(&buf[16..], target_u8_buf)
-                        .expect("decompression failed");
+                    lz4_flex::decompress_into(&buf[16..], target_u8_buf).map_err(|e| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("LZ4 decompression failed: {e}"),
+                        )
+                    })?;
 
                     if byte_plane_reordering && self.info.dtype_size > 1 {
                         // 2024-11-17: this currently takes 80% of the runtime!
