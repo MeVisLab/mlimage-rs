@@ -10,7 +10,7 @@ use ndarray::{s, Ix};
 use num::Integer;
 use tokio::{
     fs::File,
-    io::{AsyncRead, AsyncReadExt, AsyncBufReadExt, AsyncSeekExt, BufReader},
+    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeekExt, BufReader},
 };
 use winnow::{
     binary as wb,
@@ -43,7 +43,9 @@ impl ReaderWithSmartSeeking {
     async fn smart_seek(&mut self, file_offset: u64) -> std::io::Result<()> {
         let rel_offset = (file_offset - self.reader.stream_position().await?) as i64;
         if rel_offset != 0 {
-            self.reader.seek(std::io::SeekFrom::Current(rel_offset)).await?;
+            self.reader
+                .seek(std::io::SeekFrom::Current(rel_offset))
+                .await?;
         }
         Ok(())
     }
@@ -151,9 +153,12 @@ impl MLImageFormatReader {
             .zip(table_entries[flat_start_index..flat_end_index].iter_mut())
         {
             if page_idx_entry.is_none() {
-                self.reader.smart_seek(
-                    self.page_idx_table_start + flat_page_index as u64 * page_idx_entry_size as u64,
-                ).await?;
+                self.reader
+                    .smart_seek(
+                        self.page_idx_table_start
+                            + flat_page_index as u64 * page_idx_entry_size as u64,
+                    )
+                    .await?;
                 let mut buf = bytes::BytesMut::zeroed(page_idx_entry_size);
                 self.reader.read_exact(&mut buf[..]).await?;
 
@@ -172,7 +177,10 @@ impl MLImageFormatReader {
         Ok(())
     }
 
-    pub async fn get_page_idx_entry(&mut self, index: [Ix; 6]) -> Result<&PageIdxEntry, Box<dyn Error>> {
+    pub async fn get_page_idx_entry(
+        &mut self,
+        index: [Ix; 6],
+    ) -> Result<&PageIdxEntry, Box<dyn Error>> {
         if self.page_idx_table[index].is_none() {
             self.read_page_idx_entries(index).await?;
         }
@@ -351,8 +359,9 @@ impl MLImageFormatReader {
             );
 
             // TODO: can we directly read into result?
-            let page_data =
-                self.read_page::<VoxelType>(reverse6d(page_index_c.clone().into_iter())).await?;
+            let page_data = self
+                .read_page::<VoxelType>(reverse6d(page_index_c.clone().into_iter()))
+                .await?;
 
             // page
             let source_end_c: [Ix; 6] = collect6d(
@@ -413,7 +422,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_reading_partial_pages() {
-        let result = MLImageFormatReader::open("../assets/test_32x32x8_partial_pages.mlimage").await;
+        let result =
+            MLImageFormatReader::open("../assets/test_32x32x8_partial_pages.mlimage").await;
         assert!(result.is_ok());
         if let Some(mut reader) = result.ok() {
             let result_page_buf = reader.read_page::<u16>([1, 1, 2, 0, 0, 0]).await;
@@ -423,7 +433,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_reading_constant_pages() {
-        let result = MLImageFormatReader::open("../assets/test_32x32x8_constant_pages.mlimage").await;
+        let result =
+            MLImageFormatReader::open("../assets/test_32x32x8_constant_pages.mlimage").await;
         assert!(result.is_ok());
         if let Some(mut reader) = result.ok() {
             let result_page_buf = reader.read_page::<u16>([0, 1, 0, 0, 0, 0]).await;

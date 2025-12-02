@@ -33,4 +33,3 @@ impl Display for InvalidFile {
         write!(f, "invalid MLImageFormat ({})", self.msg)
     }
 }
-
