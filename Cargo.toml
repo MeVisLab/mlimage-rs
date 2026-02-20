@@ -4,3 +4,7 @@ members = [
     "mlimage_py",
 ]
 resolver = "2"
+
+[profile.bench]
+debug = true
+strip = "none"
