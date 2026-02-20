@@ -1,7 +1,13 @@
 use std::str::from_utf8;
 
 use winnow::{
-    ascii::{dec_uint, digit1, space0}, binary as wb, combinator::{delimited, preceded, repeat, terminated}, error::{ContextError, ErrMode, ErrorKind, FromExternalError, ParserError}, stream::{AsBytes, Stream, StreamIsPartial}, token::take_until, ModalResult, Parser
+    ascii::{dec_uint, digit1, space0},
+    binary as wb,
+    combinator::{delimited, preceded, repeat, terminated},
+    error::{ContextError, ErrMode, ErrorKind, FromExternalError, ParserError},
+    stream::{AsBytes, Stream, StreamIsPartial},
+    token::take_until,
+    ModalResult, Parser,
 };
 
 use crate::{
