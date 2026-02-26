@@ -9,5 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 mlimage-rs = { version = "0.1.0", path = "../mlimage_format" }
-numpy = "0.21.0"
-pyo3 = { version = "0.21.1", features = ["extension-module"] }
+numpy = "0.28.0"
+pyo3 = { version = "0.28.2", features = ["extension-module"] }
+pyo3-async-runtimes = { version = "0.28.0", features = ["attributes", "tokio-runtime"] }
+tokio = { version = "1.43.0", features = ["sync"] }
