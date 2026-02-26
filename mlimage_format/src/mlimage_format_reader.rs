@@ -119,7 +119,7 @@ impl MLImageFormatReader {
             )
         })?;
 
-        let page_idx_table = ndarray::Array::from_elem(info.page_count_per_dim(), None);
+        let page_idx_table = ndarray::Array::from_elem(info.page_count_per_dim_c(), None);
 
         let reader = ReaderWithSmartSeeking::new(reader);
 
@@ -135,7 +135,7 @@ impl MLImageFormatReader {
     async fn read_page_idx_entries(&mut self, index: [Ix; 6]) -> Result<(), Box<dyn Error>> {
         let mut flat_start_index = 0;
         for dim in 0..6 {
-            flat_start_index *= self.page_idx_table.shape()[5 - dim];
+            flat_start_index *= self.page_idx_table.shape()[dim];
             flat_start_index += index[5 - dim];
         }
 
@@ -178,17 +178,26 @@ impl MLImageFormatReader {
         Ok(())
     }
 
+    /// Return page index entry for the given 6D page index in (x, y, z, c, t,
+    /// u) order (Fortran/ logical order); this may result in a disk read if the
+    /// entry is not cached yet, but it will read and cache multiple entries at
+    /// once for speed.
     pub async fn get_page_idx_entry(
         &mut self,
         index: [Ix; 6],
     ) -> Result<&PageIdxEntry, Box<dyn Error>> {
-        if self.page_idx_table[index].is_none() {
+        let index_c = reverse6d(index.into_iter());
+
+        if self.page_idx_table[index_c].is_none() {
             self.read_page_idx_entries(index).await?;
         }
 
-        Ok(self.page_idx_table[index].as_ref().unwrap())
+        Ok(self.page_idx_table[index_c].as_ref().unwrap())
     }
 
+    /// Read page with given 6D page index in (x, y, z, c, t, u) order (Fortran/
+    /// logical order) into a 6D array of the given voxel type; the voxel type
+    /// must match that of this particular image file.
     pub async fn read_page<VoxelType>(
         &mut self,
         index: [Ix; 6],

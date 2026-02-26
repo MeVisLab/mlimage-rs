@@ -71,6 +71,14 @@ impl MLImageInfo {
         )
     }
 
+    /// Number of pages per dimension in (u, c, t, z, y, x) order ("C order",
+    /// memory order, with the last index being the fastest changing one)
+    pub fn page_count_per_dim_c(&self) -> [usize; 6] {
+        let mut result = self.page_count_per_dim();
+        result.reverse();
+        result
+    }
+
     pub fn from_tag_list(tag_list: TagList) -> Result<Self, TagError> {
         let endianness = if tag_list.parse_tag_value::<u8>("ML_ENDIANESS")? > 0 {
             winnow::binary::Endianness::Big

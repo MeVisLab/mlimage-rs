@@ -16,7 +16,9 @@ the requirements I found to have:
 * generic over its type, of course
 * a box type (pair of start/end) would be great, too
 * some information on the dimensions would be cool
-  * in particular, we have to deal with C-order and Fortran-order vectors
+  * in particular, we have to deal with both C-order and Fortran-order vectors,
+    and it seems to be borderline *necessary* to be able to distinguish them on
+    type level
 
 For now, I have been using plain arrays (`[Ix; 6]` for instance), and used `_c`
 suffixes to mark C-order vectors (utczyx), while the default is Fortran order
