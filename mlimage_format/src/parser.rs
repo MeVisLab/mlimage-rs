@@ -4,7 +4,7 @@ use winnow::{
     ascii::{dec_uint, digit1, space0},
     binary as wb,
     combinator::{delimited, preceded, repeat, terminated},
-    error::{ContextError, ErrMode, ErrorKind, FromExternalError, ParserError},
+    error::{ContextError, ErrMode, FromExternalError, ParserError},
     stream::{AsBytes, Stream, StreamIsPartial},
     token::take_until,
     ModalResult, Parser,
@@ -119,7 +119,6 @@ pub fn parse_info(input: &mut &[u8]) -> ModalResult<MLImageInfo> {
     MLImageInfo::from_tag_list(tag_list).map_err(|e| {
         ErrMode::Cut(ContextError::from_external_error(
             &tag_list_begin,
-            ErrorKind::Tag,
             e,
         ))
     })

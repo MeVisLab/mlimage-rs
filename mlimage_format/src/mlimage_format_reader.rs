@@ -345,7 +345,7 @@ impl MLImageFormatReader {
         //    collect6d(izip!(&page_index_start, &page_index_end).map(|(s, e)| (e - s)));
 
         let box_extent_c = collect6d(
-            izip!(box_start.iter().rev(), box_end.iter().rev()).map(|(start, end)| (end - start)),
+            izip!(box_start.iter().rev(), box_end.iter().rev()).map(|(start, end)| end - start),
         );
 
         let mut result =
