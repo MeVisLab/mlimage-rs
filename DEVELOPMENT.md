@@ -22,7 +22,7 @@ with
 
 and install it with
 
-  pip install --user ../target/wheels/*whl
+    pip install --user ../target/wheels/*whl
 
 or – if you want to work on the extension and test the current state without
 reinstalling everytime, use
