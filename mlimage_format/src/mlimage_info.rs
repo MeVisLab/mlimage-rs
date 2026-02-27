@@ -1,10 +1,11 @@
 use ndarray::Ix;
 
-use crate::tag_list::{TagError, TagList};
+use crate::{tag_list::{TagError, TagList}, dtype::DType};
 
 #[derive(Debug)]
 pub struct MLImageInfo {
     pub endianness: winnow::binary::Endianness,
+    pub dtype: Option<DType>,
     pub dtype_size: usize,
     pub image_extent: [Ix; 6],
     pub page_extent: [Ix; 6],
@@ -87,6 +88,10 @@ impl MLImageInfo {
         };
 
         let dtype_size: usize = tag_list.parse_tag_value("ML_IMAGE_DTYPE_SIZE").unwrap();
+        let dtype: Option<DType> = tag_list
+            .parse_tag_value::<String>("ML_IMAGE_DTYPE")
+            .ok()
+            .and_then(|name| DType::new_from_name(&name));
 
         let image_extent: [Ix; 6] = collect6d("XYZCTU".chars().filter_map(|dim| {
             tag_list
@@ -114,6 +119,7 @@ impl MLImageInfo {
 
         Ok(Self {
             endianness,
+            dtype,
             dtype_size,
             image_extent,
             page_extent,
