@@ -12,6 +12,8 @@ file in python, although still quite clumsily.
 As of 2024-10-05, there is also a proper `get_tile()` implementation in Rust
 that makes it much less clumsy.
 
+Build instructions can be found in [the DEVELOPMENT.md documentation](DEVELOPMENT.md).
+
 ## Limitations
 
 Currently, many things are not yet implemented:
