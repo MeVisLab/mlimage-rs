@@ -9,16 +9,16 @@ Commands
 The `mlimage_format` directory contains a Rust library crate for loading
 .mlimage files that can be built and tested using
 
-  # within the `mlimage_format` directory
-  cargo build --release
-  cargo test --release
+    # within the `mlimage_format` directory
+    cargo build --release
+    cargo test --release
 
 as usual.  The `mlimage_py` directory contains python bindings that use pyo3; in
 order to link against the correct Python libraries, one should build a wheel
 with
 
-  # from the `mlimage_py` directory
-  maturin-3.12 build --release
+    # from the `mlimage_py` directory
+    maturin-3.12 build --release
 
 and install it with
 
@@ -27,13 +27,13 @@ and install it with
 or – if you want to work on the extension and test the current state without
 reinstalling everytime, use
 
-  # possibly add --release as well (for speed)
-  maturin-3.12 develop
+    # possibly add --release as well (for speed)
+    maturin-3.12 develop
 
 Afterwards, tests of the python wrappers can be run via
 
-  # from the `mlimage_py` directory
-  pytest test.py
+    # from the `mlimage_py` directory
+    pytest test.py
 
 Vector Type
 -----------
