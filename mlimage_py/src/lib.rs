@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use mlimage_rs::{dtype::{DType, GetMLDType}, mlimage_format_reader::MLImageFormatReader};
+use mlimage_rs::{dtype::GetMLDType, mlimage_format_reader::MLImageFormatReader};
 use numpy::{ndarray::Ix, IntoPyArray, PyArray2};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use tokio::sync::Mutex;
