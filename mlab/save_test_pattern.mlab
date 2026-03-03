@@ -1,14 +1,14 @@
 // MDL v1 utf8
-mevislabVersion = 3.5legacy
-network  {
+mevislabVersion = 4.2.70.527
+network {
   watchlist = ""
 }
 module TestPattern {
-  internal  {
-    frame = "473 309 112 72"
+  internal {
+    frame = "201 349 144 72"
     moduleGroupName = ""
     showNetworkPanel = true
-    windows  {
+    windows {
       window _default {
         geometry = "686 293 301 436"
         sizeHint = "301 436"
@@ -16,7 +16,7 @@ module TestPattern {
       }
     }
   }
-  fields  {
+  fields {
     instanceName = TestPattern
     sizeX = 32
     sizeY = 32
@@ -42,11 +42,11 @@ module TestPattern {
   }
 }
 module MLImageFormatSave {
-  internal  {
-    frame = "441 173 176 56"
+  internal {
+    frame = "165 229 184 56"
     moduleGroupName = ""
     showNetworkPanel = true
-    windows  {
+    windows {
       window _default {
         geometry = "585 304 390 429"
         sizeHint = "340 429"
@@ -54,7 +54,7 @@ module MLImageFormatSave {
       }
     }
   }
-  fields  {
+  fields {
     instanceName = MLImageFormatSave
     compression = LZ4
     dblHintVal0 = 0
@@ -113,11 +113,11 @@ module MLImageFormatSave {
   }
 }
 module TestPattern {
-  internal  {
-    frame = "681 309 144 72"
+  internal {
+    frame = "457 389 144 72"
     moduleGroupName = ""
     showNetworkPanel = true
-    windows  {
+    windows {
       window _default {
         geometry = "686 293 301 436"
         sizeHint = "301 436"
@@ -125,7 +125,7 @@ module TestPattern {
       }
     }
   }
-  fields  {
+  fields {
     instanceName = TestPattern1
     sizeX = 32
     sizeY = 32
@@ -151,11 +151,11 @@ module TestPattern {
   }
 }
 module MLImageFormatSave {
-  internal  {
-    frame = "661 173 184 56"
+  internal {
+    frame = "445 273 184 64"
     moduleGroupName = ""
     showNetworkPanel = true
-    windows  {
+    windows {
       window _default {
         geometry = "585 304 390 429"
         sizeHint = "340 429"
@@ -163,7 +163,7 @@ module MLImageFormatSave {
       }
     }
   }
-  fields  {
+  fields {
     instanceName = PartialPagesSave
     compression = LZ4
     dblHintVal0 = 0
@@ -222,11 +222,11 @@ module MLImageFormatSave {
   }
 }
 module TestPattern {
-  internal  {
-    frame = "897 309 144 72"
+  internal {
+    frame = "1185 509 128 72"
     moduleGroupName = ""
     showNetworkPanel = true
-    windows  {
+    windows {
       window _default {
         geometry = "686 293 301 436"
         sizeHint = "301 436"
@@ -234,7 +234,7 @@ module TestPattern {
       }
     }
   }
-  fields  {
+  fields {
     instanceName = TestPattern2
     sizeX = 32
     sizeY = 32
@@ -260,11 +260,11 @@ module TestPattern {
   }
 }
 module MLImageFormatSave {
-  internal  {
-    frame = "877 173 184 56"
+  internal {
+    frame = "1181 257 184 64"
     moduleGroupName = ""
     showNetworkPanel = true
-    windows  {
+    windows {
       window _default {
         geometry = "585 304 390 429"
         sizeHint = "340 429"
@@ -272,7 +272,7 @@ module MLImageFormatSave {
       }
     }
   }
-  fields  {
+  fields {
     instanceName = ConstantPagesSave
     compression = LZ4
     dblHintVal0 = 0
@@ -330,9 +330,373 @@ module MLImageFormatSave {
     fileName = $(NETWORK)/test_32x32x8_constant_pages.mlimage
   }
 }
-connections  {
+module MLImageFormatSave {
+  internal {
+    frame = "953 257 208 64"
+    moduleGroupName = ""
+    showNetworkPanel = true
+    windows {
+      window _default {
+        geometry = "585 304 390 429"
+        sizeHint = "340 429"
+        wasOpen = no
+      }
+    }
+  }
+  fields {
+    instanceName = ConstantPagesSaveUint8
+    compression = LZ4
+    dblHintVal0 = 0
+    intHintVal0 = 0
+    strHintVal0 = ""
+    boolHintVal0 = FALSE
+    dblHintVal1 = 0
+    intHintVal1 = 0
+    strHintVal1 = ""
+    boolHintVal1 = FALSE
+    dblHintVal2 = 0
+    intHintVal2 = 0
+    strHintVal2 = ""
+    boolHintVal2 = FALSE
+    dblHintVal3 = 0
+    intHintVal3 = 0
+    strHintVal3 = ""
+    boolHintVal3 = FALSE
+    dblHintVal4 = 0
+    intHintVal4 = 0
+    strHintVal4 = ""
+    boolHintVal4 = FALSE
+    dblHintVal5 = 0
+    intHintVal5 = 0
+    strHintVal5 = ""
+    boolHintVal5 = FALSE
+    dblHintVal6 = 0
+    intHintVal6 = 0
+    strHintVal6 = ""
+    boolHintVal6 = FALSE
+    dblHintVal7 = 0
+    intHintVal7 = 0
+    strHintVal7 = ""
+    boolHintVal7 = FALSE
+    dblHintVal8 = 0
+    intHintVal8 = 0
+    strHintVal8 = ""
+    boolHintVal8 = FALSE
+    dblHintVal9 = 0
+    intHintVal9 = 0
+    strHintVal9 = ""
+    boolHintVal9 = FALSE
+    userTag00 = ""
+    userTag01 = ""
+    userTag02 = ""
+    userTag03 = ""
+    userTag04 = ""
+    userTag05 = ""
+    userTag06 = ""
+    userTag07 = ""
+    userTag08 = ""
+    userTag09 = ""
+    regionOffset = "0 0 0 0 0 0"
+    suppressWorldPos = FALSE
+    fileName = $(NETWORK)/test_32x32x8_constant_pages_uint8.mlimage
+  }
+}
+module MLImageFormatSave {
+  internal {
+    frame = "733 257 200 64"
+    moduleGroupName = ""
+    showNetworkPanel = true
+    windows {
+      window _default {
+        geometry = "585 304 390 429"
+        sizeHint = "340 429"
+        wasOpen = no
+      }
+    }
+  }
+  fields {
+    instanceName = ConstantPagesSaveInt32
+    compression = LZ4
+    dblHintVal0 = 0
+    intHintVal0 = 0
+    strHintVal0 = ""
+    boolHintVal0 = FALSE
+    dblHintVal1 = 0
+    intHintVal1 = 0
+    strHintVal1 = ""
+    boolHintVal1 = FALSE
+    dblHintVal2 = 0
+    intHintVal2 = 0
+    strHintVal2 = ""
+    boolHintVal2 = FALSE
+    dblHintVal3 = 0
+    intHintVal3 = 0
+    strHintVal3 = ""
+    boolHintVal3 = FALSE
+    dblHintVal4 = 0
+    intHintVal4 = 0
+    strHintVal4 = ""
+    boolHintVal4 = FALSE
+    dblHintVal5 = 0
+    intHintVal5 = 0
+    strHintVal5 = ""
+    boolHintVal5 = FALSE
+    dblHintVal6 = 0
+    intHintVal6 = 0
+    strHintVal6 = ""
+    boolHintVal6 = FALSE
+    dblHintVal7 = 0
+    intHintVal7 = 0
+    strHintVal7 = ""
+    boolHintVal7 = FALSE
+    dblHintVal8 = 0
+    intHintVal8 = 0
+    strHintVal8 = ""
+    boolHintVal8 = FALSE
+    dblHintVal9 = 0
+    intHintVal9 = 0
+    strHintVal9 = ""
+    boolHintVal9 = FALSE
+    userTag00 = ""
+    userTag01 = ""
+    userTag02 = ""
+    userTag03 = ""
+    userTag04 = ""
+    userTag05 = ""
+    userTag06 = ""
+    userTag07 = ""
+    userTag08 = ""
+    userTag09 = ""
+    regionOffset = "0 0 0 0 0 0"
+    suppressWorldPos = FALSE
+    fileName = $(NETWORK)/test_32x32x8_constant_pages_int32.mlimage
+  }
+}
+module ImagePropertyConvert {
+  internal {
+    frame = "965 381 152 72"
+    moduleGroupName = ""
+    showNetworkPanel = true
+    windows {
+      window _default {
+        geometry = "857 219 340 712"
+        relativePosition = "0.0015 -0.3014"
+        sizeHint = "333 712"
+        wasOpen = no
+      }
+    }
+  }
+  fields {
+    instanceName = ImagePropertyConvert
+    changeDimensionInfo = FALSE
+    cDimInfo = ""
+    tDimInfo = ""
+    uDimInfo = ""
+    a00 = 1
+    a01 = 0
+    a02 = 0
+    a03 = 0
+    a10 = 0
+    a11 = 1
+    a12 = 0
+    a13 = 0
+    a20 = 0
+    a21 = 0
+    a22 = 1
+    a23 = 0
+    a30 = 0
+    a31 = 0
+    a32 = 0
+    a33 = 1
+    worldMatrix = "1 0 0 0
+0 1 0 0
+0 0 1 0
+0 0 0 1"
+    changeDatatype = TRUE
+    datatype = "unsigned int8"
+    changePageSize = FALSE
+    pageSizeX = 32
+    pageSizeY = 32
+    pageSizeZ = 1
+    pageSizeC = 1
+    pageSizeT = 1
+    pageSizeU = 1
+    changeMinGrayValue = FALSE
+    minGrayValue = 0
+    changeMaxGrayValue = FALSE
+    maxGrayValue = 1
+    changeWorldMatrix = FALSE
+    voxelSizeX = 1
+    voxelSizeY = 1
+    voxelSizeZ = 1
+    autoApply = TRUE
+  }
+}
+module Arithmetic {
+  internal {
+    frame = "797 389 104 72"
+    moduleGroupName = ""
+    showNetworkPanel = true
+    windows {
+      window _default {
+        geometry = "735 331 576 560"
+        relativePosition = "-0.0005 -0.2004"
+        sizeHint = "576 560"
+        wasOpen = no
+      }
+    }
+  }
+  fields {
+    instanceName = Arithmetic
+    expression = "a * 150 - 200"
+    i1 = 0
+    i2 = 0
+    i3 = 0
+    i4 = 0
+    i5 = 0
+    i6 = 0
+    d1 = 0
+    d2 = 0
+    d3 = 0
+    d4 = 0
+    d5 = 0
+    d6 = 0
+    d7 = 0
+    d8 = 0
+    d9 = 0
+    d10 = 0
+    d11 = 0
+    d12 = 0
+    minValue = -200
+    maxValue = 850
+    setMinMaxValues = TRUE
+    dataType = int32
+    setDataType = TRUE
+    updateMode = AutoUpdate
+    applyMode = AutoApply
+    domainErrorHandling = ErrorMessage
+    numberOfInputs = 1
+    expressionComment = ""
+    scalarVariablesComment = ""
+  }
+}
+module TestPattern {
+  internal {
+    frame = "-31 317 144 72"
+    moduleGroupName = ""
+    showNetworkPanel = true
+    windows {
+      window _default {
+        geometry = "686 293 301 436"
+        sizeHint = "301 436"
+        wasOpen = no
+      }
+    }
+  }
+  fields {
+    instanceName = TestPattern3
+    sizeX = 32
+    sizeY = 32
+    sizeZ = 8
+    sizeC = 1
+    sizeT = 1
+    sizeU = 1
+    dataType = "unsigned int8"
+    fillValue = 0
+    autoApply = FALSE
+    pattern = IndexRamp
+    voxelSize = "1 1 1"
+    gradient = "0 0 0"
+    eigenValues = "1 0 -1"
+    offDiagonalElements = "0 0 0"
+    fillValue2 = 255
+    pageSizeX = 16
+    pageSizeY = 16
+    pageSizeZ = 2
+    pageSizeC = 1
+    pageSizeT = 1
+    pageSizeU = 1
+  }
+}
+module MLImageFormatSave {
+  internal {
+    frame = "-71 197 192 56"
+    moduleGroupName = ""
+    showNetworkPanel = true
+    windows {
+      window _default {
+        geometry = "585 304 390 429"
+        sizeHint = "340 429"
+        wasOpen = no
+      }
+    }
+  }
+  fields {
+    instanceName = MLImageFormatSave1
+    compression = LZ4
+    dblHintVal0 = 0
+    intHintVal0 = 0
+    strHintVal0 = ""
+    boolHintVal0 = FALSE
+    dblHintVal1 = 0
+    intHintVal1 = 0
+    strHintVal1 = ""
+    boolHintVal1 = FALSE
+    dblHintVal2 = 0
+    intHintVal2 = 0
+    strHintVal2 = ""
+    boolHintVal2 = FALSE
+    dblHintVal3 = 0
+    intHintVal3 = 0
+    strHintVal3 = ""
+    boolHintVal3 = FALSE
+    dblHintVal4 = 0
+    intHintVal4 = 0
+    strHintVal4 = ""
+    boolHintVal4 = FALSE
+    dblHintVal5 = 0
+    intHintVal5 = 0
+    strHintVal5 = ""
+    boolHintVal5 = FALSE
+    dblHintVal6 = 0
+    intHintVal6 = 0
+    strHintVal6 = ""
+    boolHintVal6 = FALSE
+    dblHintVal7 = 0
+    intHintVal7 = 0
+    strHintVal7 = ""
+    boolHintVal7 = FALSE
+    dblHintVal8 = 0
+    intHintVal8 = 0
+    strHintVal8 = ""
+    boolHintVal8 = FALSE
+    dblHintVal9 = 0
+    intHintVal9 = 0
+    strHintVal9 = ""
+    boolHintVal9 = FALSE
+    userTag00 = ""
+    userTag01 = ""
+    userTag02 = ""
+    userTag03 = ""
+    userTag04 = ""
+    userTag05 = ""
+    userTag06 = ""
+    userTag07 = ""
+    userTag08 = ""
+    userTag09 = ""
+    regionOffset = "0 0 0 0 0 0"
+    suppressWorldPos = FALSE
+    fileName = $(NETWORK)/test_32x32x8_uint8.mlimage
+  }
+}
+connections {
   MLImageFormatSave.input0 = TestPattern.output0
   PartialPagesSave.input0 = TestPattern1.output0
   ConstantPagesSave.input0 = TestPattern2.output0
+  ConstantPagesSaveUint8.input0 = ImagePropertyConvert.output0
+  ConstantPagesSaveInt32.input0 = Arithmetic.output0
+  ImagePropertyConvert.input0 = TestPattern2.output0
+  Arithmetic.input0 = TestPattern2.output0
+  MLImageFormatSave1.input0 = TestPattern3.output0
 }
 networkModel = ""
