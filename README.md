@@ -22,6 +22,7 @@ Currently, many things are not yet implemented:
 - only the LZ4 compressor is implemented (and uncompressed files are supported)
 - no dynamic loading of plugins (the original C++ implementation dynamically
   loads compressors, for instance)
+- diff (de)coding not implemented yet
 
 ## References
 
