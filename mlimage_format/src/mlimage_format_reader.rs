@@ -484,40 +484,54 @@ mod tests {
         }
     }
 
-    async fn check_reading_constant_pages<VoxelType>(filename: &str)
+    async fn check_reading_constant_pages<VoxelType>(filename: &str, page_values: &[VoxelType])
     where
         VoxelType: Default + Pod + PartialEq + std::fmt::Debug + NumCast,
     {
         let result = MLImageFormatReader::open(filename).await;
         assert!(result.is_ok());
         if let Ok(mut reader) = result {
-            let cases: [([Ix; 6], u8); 3] = [
-                ([0, 0, 0, 0, 0, 0], 0),
-                ([0, 1, 0, 0, 0, 0], 2),
-                ([1, 1, 1, 0, 0, 0], 7),
+            let cases: [([Ix; 6], VoxelType); 3] = [
+                ([0, 0, 0, 0, 0, 0], page_values[0]),
+                ([0, 1, 0, 0, 0, 0], page_values[1]),
+                ([1, 1, 1, 0, 0, 0], page_values[2]),
             ];
 
             for (page_index, expected_value) in cases {
-                let expected_constant: VoxelType =
-                    NumCast::from(expected_value).expect("expected constant fits into voxel type");
                 let result_page_buf = reader.read_page::<VoxelType>(page_index).await;
                 assert!(result_page_buf.is_ok());
                 result_page_buf
                     .unwrap()
                     .iter()
-                    .for_each(|&v| assert_eq!(v, expected_constant));
+                    .for_each(|&v| assert_eq!(v, expected_value));
             }
         }
     }
 
     #[tokio::test]
     async fn test_reading_constant_pages_uint16() {
-        check_reading_constant_pages::<u16>("../assets/test_32x32x8_constant_pages.mlimage").await
+        check_reading_constant_pages::<u16>(
+            "../assets/test_32x32x8_constant_pages.mlimage",
+            &[0, 2, 7],
+        )
+        .await
     }
 
     #[tokio::test]
     async fn test_reading_constant_pages_uint8() {
-        check_reading_constant_pages::<u8>("../assets/test_32x32x8_constant_pages_uint8.mlimage")
-            .await
+        check_reading_constant_pages::<u8>(
+            "../assets/test_32x32x8_constant_pages_uint8.mlimage",
+            &[0, 2, 7],
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn test_reading_constant_pages_int32() {
+        check_reading_constant_pages::<i32>(
+            "../assets/test_32x32x8_constant_pages_int32.mlimage",
+            &[-200, 100, 850],
+        )
+        .await
     }
 }
