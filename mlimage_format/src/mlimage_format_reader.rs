@@ -466,6 +466,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_image_data_uint8() {
+        let result = MLImageFormatReader::open("../assets/test_32x32x8_uint8.mlimage").await;
+        assert!(result.is_ok());
+        if let Ok(mut reader) = result {
+            let result_page_buf = reader.read_page::<u8>([0, 0, 0, 0, 0, 0]).await;
+            assert!(result_page_buf.is_ok());
+            let result_page_buf = result_page_buf.unwrap();
+            assert_eq!(result_page_buf.shape(), &[1, 1, 1, 2, 16, 16]);
+            assert_eq!(result_page_buf[[0, 0, 0, 0, 0, 0]], 0);
+
+            let result_page_buf = reader.read_page::<u8>([1, 1, 3, 0, 0, 0]).await;
+            assert!(result_page_buf.is_ok());
+            let result_page_buf = result_page_buf.unwrap();
+            assert_eq!(result_page_buf.shape(), &[1, 1, 1, 2, 16, 16]);
+            assert_eq!(result_page_buf[[0, 0, 0, 1, 15, 15]], 255);
+        }
+    }
+
+    #[tokio::test]
     async fn test_reading_partial_pages() {
         let result =
             MLImageFormatReader::open("../assets/test_32x32x8_partial_pages.mlimage").await;
