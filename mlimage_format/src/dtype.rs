@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum DType {
     MLint8,
     MLuint8,
@@ -6,10 +6,10 @@ pub enum DType {
     MLuint16,
     MLint32,
     MLuint32,
-    MLfloat,
-    MLdouble,
     MLint64,
     MLuint64,
+    MLfloat,
+    MLdouble,
 }
 
 impl DType {
@@ -44,3 +44,28 @@ impl DType {
         }
     }
 }
+
+pub trait GetMLDType {
+    const ML_DTYPE: DType;
+}
+
+macro_rules! impl_get_ml_dtype {
+    ($rust_type:ty, $dtype_variant:ident) => {
+        impl GetMLDType for $rust_type {
+            const ML_DTYPE: DType = {
+                DType::$dtype_variant
+            };
+        }
+    };
+}
+
+impl_get_ml_dtype!(u8, MLuint8);
+impl_get_ml_dtype!(i8, MLint8);
+impl_get_ml_dtype!(u16, MLuint16);
+impl_get_ml_dtype!(i16, MLint16);
+impl_get_ml_dtype!(u32, MLuint32);
+impl_get_ml_dtype!(i32, MLint32);
+impl_get_ml_dtype!(u64, MLuint64);
+impl_get_ml_dtype!(i64, MLint64);
+impl_get_ml_dtype!(f32, MLfloat);
+impl_get_ml_dtype!(f64, MLdouble);
