@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use mlimage_rs::mlimage_format_reader::MLImageFormatReader;
+use mlimage_rs::{dtype::DType, mlimage_format_reader::MLImageFormatReader};
 use numpy::{ndarray::Ix, IntoPyArray, PyArray2};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use tokio::sync::Mutex;
@@ -50,9 +50,35 @@ impl PyMLImageFormatReader {
 
         pyo3_async_runtimes::tokio::future_into_py_with_locals(py, locals.clone(), async move {
             let mut inner = inner.lock().await;
-            match inner.get_tile::<u16>(start, end).await {
-                Ok(data) => Python::attach(|py| Ok(data.into_pyarray(py).unbind())),
-                Err(e) => Err(PyRuntimeError::new_err(e.to_string())),
+            match inner.info().dtype.as_ref() {
+                Some(DType::MLuint8) => match inner.get_tile::<u8>(start, end).await {
+                    Ok(data) => Python::attach(|py| Ok(data.into_pyarray(py).into_any().unbind())),
+                    Err(e) => Err(PyRuntimeError::new_err(e.to_string())),
+                },
+                Some(DType::MLint8) => match inner.get_tile::<i8>(start, end).await {
+                    Ok(data) => Python::attach(|py| Ok(data.into_pyarray(py).into_any().unbind())),
+                    Err(e) => Err(PyRuntimeError::new_err(e.to_string())),
+                },
+                Some(DType::MLuint16) => match inner.get_tile::<u16>(start, end).await {
+                    Ok(data) => Python::attach(|py| Ok(data.into_pyarray(py).into_any().unbind())),
+                    Err(e) => Err(PyRuntimeError::new_err(e.to_string())),
+                },
+                Some(DType::MLint16) => match inner.get_tile::<i16>(start, end).await {
+                    Ok(data) => Python::attach(|py| Ok(data.into_pyarray(py).into_any().unbind())),
+                    Err(e) => Err(PyRuntimeError::new_err(e.to_string())),
+                },
+                Some(DType::MLfloat) => match inner.get_tile::<f32>(start, end).await {
+                    Ok(data) => Python::attach(|py| Ok(data.into_pyarray(py).into_any().unbind())),
+                    Err(e) => Err(PyRuntimeError::new_err(e.to_string())),
+                },
+                Some(DType::MLdouble) => match inner.get_tile::<f64>(start, end).await {
+                    Ok(data) => Python::attach(|py| Ok(data.into_pyarray(py).into_any().unbind())),
+                    Err(e) => Err(PyRuntimeError::new_err(e.to_string())),
+                },
+                Some(dtype) => Err(PyRuntimeError::new_err(format!(
+                    "Dtype '{dtype:?}' is not supported yet"
+                ))),
+                None => Err(PyRuntimeError::new_err("Unsupported voxel type")),
             }
         })
     }
