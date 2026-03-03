@@ -432,6 +432,17 @@ mod tests {
         if let Ok(mut reader) = result {
             let result_page_buf = reader.read_page::<u16>([0, 0, 0, 0, 0, 0]).await;
             assert!(result_page_buf.is_ok());
+            let result_page_buf = result_page_buf.unwrap();
+            assert_eq!(result_page_buf.shape(), &[1, 1, 1, 2, 16, 16]);
+            assert_eq!(result_page_buf[[0, 0, 0, 0, 0, 0]], 0);
+
+            let upper_right_pixel = reader
+                .get_tile::<u16>([31, 0, 0, 0, 0, 0], [32, 1, 1, 1, 1, 1])
+                .await;
+            assert!(upper_right_pixel.is_ok());
+            let upper_right_pixel = upper_right_pixel.unwrap();
+            assert_eq!(upper_right_pixel.shape(), &[1, 1, 1, 1, 1, 1]);
+            assert_eq!(upper_right_pixel[[0, 0, 0, 0, 0, 0]], 248);
         }
     }
 
@@ -442,6 +453,15 @@ mod tests {
         if let Ok(mut reader) = result {
             let result_page_buf = reader.read_page::<u16>([0, 0, 0, 0, 0, 0]).await;
             assert!(result_page_buf.is_ok());
+            let result_page_buf = result_page_buf.unwrap();
+            assert_eq!(result_page_buf.shape(), &[1, 1, 1, 2, 16, 16]);
+            assert_eq!(result_page_buf[[0, 0, 0, 0, 0, 0]], 0);
+
+            let result_page_buf = reader.read_page::<u16>([1, 1, 3, 0, 0, 0]).await;
+            assert!(result_page_buf.is_ok());
+            let result_page_buf = result_page_buf.unwrap();
+            assert_eq!(result_page_buf.shape(), &[1, 1, 1, 2, 16, 16]);
+            assert_eq!(result_page_buf[[0, 0, 0, 1, 15, 15]], 65535);
         }
     }
 
@@ -451,8 +471,16 @@ mod tests {
             MLImageFormatReader::open("../assets/test_32x32x8_partial_pages.mlimage").await;
         assert!(result.is_ok());
         if let Ok(mut reader) = result {
+            let result_page_buf = reader.read_page::<u16>([0, 0, 0, 0, 0, 0]).await;
+            assert!(result_page_buf.is_ok());
+            let result_page_buf = result_page_buf.unwrap();
+            assert_eq!(result_page_buf.shape(), &[1, 1, 1, 3, 20, 20]);
+
             let result_page_buf = reader.read_page::<u16>([1, 1, 2, 0, 0, 0]).await;
             assert!(result_page_buf.is_ok());
+            let result_page_buf = result_page_buf.unwrap();
+            assert_eq!(result_page_buf.shape(), &[1, 1, 1, 2, 12, 12]);
+            assert_eq!(result_page_buf[[0, 0, 0, 1, 11, 11]], 65535);
         }
     }
 
