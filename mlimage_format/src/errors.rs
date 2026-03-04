@@ -33,3 +33,22 @@ impl Display for InvalidFile {
         write!(f, "invalid MLImageFormat ({})", self.msg)
     }
 }
+
+#[derive(Debug, Default)]
+pub struct CompressionError {
+    msg: String,
+}
+
+impl std::error::Error for CompressionError {}
+
+impl CompressionError {
+    pub fn new(msg: String) -> Self {
+        Self { msg }
+    }
+}
+
+impl Display for CompressionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "compression error: {}", self.msg)
+    }
+}

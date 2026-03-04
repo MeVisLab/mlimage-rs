@@ -19,7 +19,7 @@ use winnow::{
 };
 
 use crate::{
-    errors::{IncompleteFile, InvalidFile},
+    errors::{CompressionError, IncompleteFile, InvalidFile},
     mlimage_info::{collect6d, reverse6d, MLImageInfo},
     parser::{parse_info, parse_page_idx_entry, tag_list_size_in_bytes, version_header},
 };
@@ -192,7 +192,9 @@ impl MLImageFormatReader {
             self.read_page_idx_entries(index).await?;
         }
 
-        Ok(self.page_idx_table[index_c].as_ref().unwrap())
+        Ok(self.page_idx_table[index_c]
+            .as_ref()
+            .expect("we have just read this entry, so it should not be None"))
     }
 
     /// Read page with given 6D page index in (x, y, z, c, t, u) order (Fortran/
@@ -237,7 +239,12 @@ impl MLImageFormatReader {
                 .unwrap_or_default();
             match &compressor_name[..] {
                 "" => {
-                    assert!(target_u8_buf.len() == read_size.try_into().unwrap());
+                    if target_u8_buf.len() != read_size.try_into().unwrap() {
+                        return Err(Box::new(CompressionError::new(format!(
+                            "raw page size ({read_size} bytes) does not match expected size ({} bytes)",
+                            target_u8_buf.len()
+                        ))));
+                    }
                     self.reader.read_exact(target_u8_buf).await?;
                 }
                 "LZ4" => {
@@ -271,9 +278,18 @@ impl MLImageFormatReader {
                     let byte_plane_reordering = (flags & 1) > 0;
                     let diff_code_data = (flags & 2) > 0;
 
-                    assert!(!diff_code_data, "diff (de)coding not implemented yet");
+                    if diff_code_data {
+                        return Err(Box::new(CompressionError::new(
+                            "diff (de)coding not implemented yet".to_string(),
+                        )));
+                    }
 
-                    assert!(target_u8_buf.len() == uncompressed_size);
+                    if target_u8_buf.len() != uncompressed_size {
+                        return Err(Box::new(CompressionError::new(format!(
+                            "uncompressed page size ({uncompressed_size} bytes) differs from expected size ({} bytes)",
+                            target_u8_buf.len()
+                        ))));
+                    }
 
                     // TODO: what's the meaning of the return code? its a usize that
                     // is smaller than uncompressed_size, but larger than read_size
