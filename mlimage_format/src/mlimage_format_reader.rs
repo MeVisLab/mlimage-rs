@@ -1,6 +1,7 @@
 use std::{
     cmp::{self, min},
     error::Error,
+    ops::Shr,
     path::Path,
 };
 
@@ -83,7 +84,7 @@ pub struct PageIdxEntry {
 type PageIdxTable = ndarray::Array6<Option<PageIdxEntry>>;
 
 const VERSION_HEADER_SIZE: usize = "MLImageFormatVersion.".len() + 3 * 4;
-const PAGE_IDX_ENTRY_SIZE: usize = 8 + 8 + 5 + 11;
+const PAGE_IDX_ENTRY_SIZE: usize = 8 + 8 + 5 + 11; // = 32 bytes, excluding raw_voxel_value
 const BLOCK_READ_SIZE: usize = 64 * 1024;
 
 impl MLImageFormatReader {
@@ -232,11 +233,14 @@ impl MLImageFormatReader {
                 .as_slice_mut()
                 .expect("freshly constructed array should be contiguous");
             let target_u8_buf: &mut [u8] = cast_slice_mut(target_voxeltype_buf);
-            let compressor_name = self
-                .info
-                .tag_list
-                .tag_value("ML_COMPRESSOR_NAME")
-                .unwrap_or_default();
+            let compressor_name = if page_idx_entry.is_compressed {
+                self.info
+                    .tag_list
+                    .tag_value("ML_COMPRESSOR_NAME")
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
             match &compressor_name[..] {
                 "" => {
                     if target_u8_buf.len() != read_size.try_into().unwrap() {
@@ -259,7 +263,7 @@ impl MLImageFormatReader {
                     // parse LZ4 compression header
                     let (uncompressed_size, flags) = (
                         wb::i64::<&[u8], ()>(wb::Endianness::Little),
-                        wb::i64(wb::Endianness::Little),
+                        wb::i64::<&[u8], ()>(wb::Endianness::Little),
                     )
                         .parse_next(&mut &buf[..])
                         .map_err(|_| {
@@ -268,25 +272,31 @@ impl MLImageFormatReader {
                                 "failed to parse LZ4 header",
                             )
                         })?;
-                    let uncompressed_size = usize::try_from(uncompressed_size).map_err(|_| {
+                    let announced_size = usize::try_from(uncompressed_size).map_err(|_| {
                         std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            "invalid uncompressed size",
+                            "invalid announced uncompressed size",
                         )
                     })?;
 
                     let byte_plane_reordering = (flags & 1) > 0;
                     let diff_code_data = (flags & 2) > 0;
+                    let voxeltype_size = (flags.shr(8) & 0x01ffi64) as usize;
 
+                    if flags & 0x7FFFFFFFFFFE00F8 != 0 {
+                        return Err(Box::new(CompressionError::new(format!(
+                            "unexpected flags set in LZ4 header: {flags:#x}"
+                        ))));
+                    }
                     if diff_code_data {
                         return Err(Box::new(CompressionError::new(
                             "diff (de)coding not implemented yet".to_string(),
                         )));
                     }
 
-                    if target_u8_buf.len() != uncompressed_size {
+                    if target_u8_buf.len() != announced_size {
                         return Err(Box::new(CompressionError::new(format!(
-                            "uncompressed page size ({uncompressed_size} bytes) differs from expected size ({} bytes)",
+                            "announced uncompressed page size ({announced_size} bytes) differs from expected size ({} bytes)",
                             target_u8_buf.len()
                         ))));
                     }
@@ -568,5 +578,20 @@ mod tests {
             &[-200, 100, 850],
         )
         .await
+    }
+
+    #[tokio::test]
+    async fn test_uncompressed_page_in_compressed_file() {
+        let result = MLImageFormatReader::open("../assets/uncompressed_mask.mlimage").await;
+        assert!(result.is_ok());
+        if let Ok(mut reader) = result {
+            let result_page_buf = reader.read_page::<u8>([0, 0, 0, 0, 0, 0]).await;
+            assert!(result_page_buf.is_ok());
+            let result_page_buf = result_page_buf.unwrap();
+            assert_eq!(result_page_buf.shape(), &[1, 1, 1, 1, 5, 6]);
+            assert_eq!(result_page_buf[[0, 0, 0, 0, 0, 0]], 2);
+            assert_eq!(result_page_buf[[0, 0, 0, 0, 1, 4]], 2);
+            assert_eq!(result_page_buf[[0, 0, 0, 0, 1, 5]], 0);
+        }
     }
 }
