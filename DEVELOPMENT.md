@@ -18,6 +18,8 @@ order to link against the correct Python libraries, one should build a wheel
 with
 
     # from the `mlimage_py` directory
+    uv build
+    # or, if `uv` is not installed (also within `mlimage_py`):
     maturin-3.12 build --release
 
 and install it with
@@ -64,3 +66,12 @@ the array:
     let page_index_start: [Ix; 6] =
         collect6d(izip!(&box_start, &page_extent).map(|(pos, ext)| pos / ext));
 ```
+
+Releases
+--------
+
+Releases of the [`mlimage` Python extension on PyPI](https://pypi.org/project/mlimage/)
+can be triggered by pushing a tag such as pypi-0.1.0 to GitHub.  The GitHub action
+will then build and release the current version, but the version number will be
+taken from the `pyproject.toml`, so make sure that the version number is updated
+and matches the tag being pushed.
