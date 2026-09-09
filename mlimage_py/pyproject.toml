@@ -1,6 +1,6 @@
 [project]
 name = "mlimage"
-version = "0.2.1"
+version = "0.2.2"
 description = "Python bindings for mlimage-rs, exposing a reader for MeVisLab's MLImage file format for medical imaging"
 #readme = "README.md"
 license = { text = "Apache-2.0" }
