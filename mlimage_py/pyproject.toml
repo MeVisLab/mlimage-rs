@@ -2,7 +2,7 @@
 name = "mlimage"
 version = "0.2.2"
 description = "Python bindings for mlimage-rs, exposing a reader for MeVisLab's MLImage file format for medical imaging"
-#readme = "README.md"
+readme = { file = "README.md", content-type = "text/markdown" }
 license = { text = "Apache-2.0" }
 authors = [
     { name = "Hans Meine", email = "hans_meine@gmx.net" },
