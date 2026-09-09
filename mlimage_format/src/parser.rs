@@ -116,12 +116,8 @@ pub fn parse_info(input: &mut &[u8]) -> ModalResult<MLImageInfo> {
     let tag_list_buffer: Vec<_> = repeat(tag_list_size, wb::u8).parse_next(input)?;
     let tag_list = TagList::new(tag_list.parse_next(&mut &tag_list_buffer[..])?);
 
-    MLImageInfo::from_tag_list(tag_list).map_err(|e| {
-        ErrMode::Cut(ContextError::from_external_error(
-            &tag_list_begin,
-            e,
-        ))
-    })
+    MLImageInfo::from_tag_list(tag_list)
+        .map_err(|e| ErrMode::Cut(ContextError::from_external_error(&tag_list_begin, e)))
 }
 
 #[cfg(test)]

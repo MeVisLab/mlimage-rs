@@ -52,9 +52,7 @@ pub trait GetMLDType {
 macro_rules! impl_get_ml_dtype {
     ($rust_type:ty, $dtype_variant:ident) => {
         impl GetMLDType for $rust_type {
-            const ML_DTYPE: DType = {
-                DType::$dtype_variant
-            };
+            const ML_DTYPE: DType = { DType::$dtype_variant };
         }
     };
 }

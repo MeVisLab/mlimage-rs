@@ -1,6 +1,9 @@
 use ndarray::Ix;
 
-use crate::{tag_list::{TagError, TagList}, dtype::DType};
+use crate::{
+    dtype::DType,
+    tag_list::{TagError, TagList},
+};
 
 #[derive(Debug)]
 pub struct MLImageInfo {
