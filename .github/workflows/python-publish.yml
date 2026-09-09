@@ -32,7 +32,9 @@ jobs:
           enable-cache: true
 
       - name: Build release distributions
-        run: uv build
+        run: |
+            cd mlimage_py
+            uv build
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
