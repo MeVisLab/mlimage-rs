@@ -1,0 +1,13 @@
+[project]
+name = "mlimage"
+version = "0.2.0"
+description = "Python bindings for mlimage-rs, exposing a reader for MeVisLab's MLImage file format for medical imaging"
+#readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Hans Meine", email = "hans_meine@gmx.net" },
+]
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
