@@ -92,6 +92,10 @@ impl MLImageFormatReader {
         &self.info
     }
 
+    pub fn version(&self) -> &VersionHeader {
+        &self.version
+    }
+
     pub async fn open<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
         let f = File::open(path).await?;
         let mut reader = BufReader::with_capacity(BLOCK_READ_SIZE, f);
@@ -281,7 +285,7 @@ impl MLImageFormatReader {
 
                     let byte_plane_reordering = (flags & 1) > 0;
                     let diff_code_data = (flags & 2) > 0;
-                    let voxeltype_size = (flags.shr(8) & 0x01ffi64) as usize;
+                    let _voxeltype_size = (flags.shr(8) & 0x01ffi64) as usize;
 
                     if flags & 0x7FFFFFFFFFFE00F8 != 0 {
                         return Err(Box::new(CompressionError::new(format!(
