@@ -24,8 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0  # Fetch all history for versioning
-          fetch-tags: true  # Fetch tags for versioning
+          ref: ${{ github.ref }}
 
       - uses: astral-sh/setup-uv@v7
         with:
