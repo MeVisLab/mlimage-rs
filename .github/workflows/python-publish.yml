@@ -18,7 +18,8 @@ permissions:
 
 jobs:
   release-build:
-    runs-on: pypa/manylinux
+    runs-on: ubuntu-latest
+    container: quay.io/pypa/manylinux_2_28_x86_64
 
     steps:
       - uses: actions/checkout@v7
